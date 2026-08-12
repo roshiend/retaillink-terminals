@@ -4,9 +4,14 @@
   "private": true,
   "packageManager": "pnpm@10.15.0",
   "scripts": {
+    "dev": "pnpm --parallel --filter @retaillink/api --filter @retaillink/dashboard --filter @retaillink/checkout dev",
     "dev:api": "pnpm --filter @retaillink/api dev",
+    "dev:dashboard": "pnpm --filter @retaillink/dashboard dev",
+    "dev:checkout": "pnpm --filter @retaillink/checkout dev",
     "db:generate": "pnpm --filter @retaillink/database prisma:generate",
     "db:migrate": "pnpm --filter @retaillink/database prisma:migrate",
-    "db:studio": "pnpm --filter @retaillink/database prisma:studio"
+    "db:seed": "pnpm --filter @retaillink/database seed",
+    "db:studio": "pnpm --filter @retaillink/database prisma:studio",
+    "build": "pnpm --filter @retaillink/dashboard build && pnpm --filter @retaillink/checkout build"
   }
 }
