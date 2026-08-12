@@ -1,0 +1,147 @@
+openapi: 3.1.0
+info:
+  title: Retaillink Terminals Sandbox API
+  version: 0.1.0
+  description: Sandbox-only payment gateway API. Never submit real card data.
+servers:
+  - url: http://localhost:3001
+components:
+  securitySchemes:
+    SecretKey:
+      type: http
+      scheme: bearer
+      bearerFormat: sk_test
+  schemas:
+    PaymentIntentCreate:
+      type: object
+      required: [amount]
+      properties:
+        amount: { type: integer, minimum: 1, description: Amount in minor currency units }
+        currency: { type: string, default: LKR, minLength: 3, maxLength: 3 }
+        merchant_reference: { type: string }
+        description: { type: string }
+        metadata: { type: object, additionalProperties: true }
+    RefundCreate:
+      type: object
+      properties:
+        amount: { type: integer, minimum: 1 }
+        reason: { type: string }
+    WebhookCreate:
+      type: object
+      required: [url]
+      properties:
+        url: { type: string, format: uri }
+security:
+  - SecretKey: []
+paths:
+  /health:
+    get:
+      security: []
+      summary: API health check
+      responses:
+        '200': { description: Healthy }
+  /v1/payment_intents:
+    get:
+      summary: List payment intents
+      responses:
+        '200': { description: Payment intent list }
+    post:
+      summary: Create payment intent
+      parameters:
+        - in: header
+          name: Idempotency-Key
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PaymentIntentCreate' }
+      responses:
+        '201': { description: Payment intent created }
+        '400': { description: Invalid request }
+        '401': { description: Invalid API key }
+  /v1/payment_intents/{id}:
+    get:
+      summary: Retrieve payment intent
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Payment intent }
+        '404': { description: Not found }
+  /v1/payments:
+    get:
+      summary: List payments
+      responses:
+        '200': { description: Payment list }
+  /v1/payments/{id}:
+    get:
+      summary: Retrieve payment
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Payment }
+        '404': { description: Not found }
+  /v1/payments/{id}/refunds:
+    post:
+      summary: Refund payment
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RefundCreate' }
+      responses:
+        '201': { description: Refund created }
+  /v1/refunds:
+    get:
+      summary: List refunds
+      responses:
+        '200': { description: Refund list }
+  /v1/balance:
+    get:
+      summary: Retrieve merchant payable balance
+      responses:
+        '200': { description: Balance }
+  /v1/settlements:
+    get:
+      summary: List settlements
+      responses:
+        '200': { description: Settlement list }
+  /v1/webhook_endpoints:
+    get:
+      summary: List webhook endpoints
+      responses:
+        '200': { description: Webhook endpoint list }
+    post:
+      summary: Create webhook endpoint
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/WebhookCreate' }
+      responses:
+        '201': { description: Endpoint created }
+  /v1/webhook_endpoints/{id}:
+    delete:
+      summary: Delete webhook endpoint
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Endpoint deleted }
+  /v1/webhook_deliveries:
+    get:
+      summary: List recent webhook deliveries
+      responses:
+        '200': { description: Webhook delivery list }
