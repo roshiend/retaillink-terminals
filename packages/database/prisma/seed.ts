@@ -1,6 +1,26 @@
 import { createHash, randomBytes } from 'node:crypto';
-import { PrismaClient } from '@prisma/client';
+import { existsSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { config } from 'dotenv';
 
+const envCandidates = [
+  resolve(process.cwd(), '.env'),
+  resolve(process.cwd(), 'packages/database/.env'),
+];
+
+for (const envPath of envCandidates) {
+  if (existsSync(envPath)) {
+    config({ path: envPath, override: false });
+  }
+}
+
+if (!process.env.DATABASE_URL) {
+  throw new Error(
+    'DATABASE_URL is not set. Copy packages/database/.env.example to packages/database/.env, then rerun pnpm db:seed.',
+  );
+}
+
+const { PrismaClient } = await import('@prisma/client');
 const prisma = new PrismaClient();
 
 async function main() {
