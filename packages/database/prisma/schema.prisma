@@ -57,7 +57,9 @@ model User {
   id           String           @id @default(cuid())
   email        String           @unique
   passwordHash String
-  memberships MerchantUser[]
+  memberships  MerchantUser[]
+  sessions     Session[]
+  auditLogs    AuditLog[]
   createdAt    DateTime         @default(now())
   updatedAt    DateTime         @updatedAt
 }
@@ -68,6 +70,7 @@ model Merchant {
   country          String            @default("LK")
   defaultCurrency  String            @default("LKR")
   memberships      MerchantUser[]
+  sessions         Session[]
   apiKeys          ApiKey[]
   paymentIntents   PaymentIntent[]
   payments         Payment[]
@@ -75,6 +78,7 @@ model Merchant {
   webhookEndpoints WebhookEndpoint[]
   ledgerAccounts   LedgerAccount[]
   settlements      Settlement[]
+  auditLogs        AuditLog[]
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
 }
@@ -89,6 +93,23 @@ model MerchantUser {
   createdAt  DateTime @default(now())
 
   @@unique([userId, merchantId])
+  @@index([merchantId])
+}
+
+model Session {
+  id         String   @id @default(cuid())
+  tokenHash  String   @unique
+  userId     String
+  merchantId String
+  expiresAt  DateTime
+  lastSeenAt DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  merchant   Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+
+  @@index([userId])
+  @@index([merchantId])
+  @@index([expiresAt])
 }
 
 model ApiKey {
@@ -169,32 +190,32 @@ model Refund {
 }
 
 model WebhookEndpoint {
-  id         String         @id @default(cuid())
+  id         String            @id @default(cuid())
   merchantId String
   url        String
   secret     String
-  enabled    Boolean        @default(true)
-  merchant   Merchant       @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  enabled    Boolean           @default(true)
+  merchant   Merchant          @relation(fields: [merchantId], references: [id], onDelete: Cascade)
   deliveries WebhookDelivery[]
-  createdAt  DateTime       @default(now())
-  updatedAt  DateTime       @updatedAt
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
 
   @@index([merchantId])
 }
 
 model WebhookDelivery {
-  id         String                @id @default(cuid())
-  endpointId String
-  eventId    String
-  eventType  String
-  payload    Json
-  status     WebhookDeliveryStatus @default(PENDING)
-  attempts   Int                   @default(0)
-  lastError  String?
+  id          String                @id @default(cuid())
+  endpointId  String
+  eventId     String
+  eventType   String
+  payload     Json
+  status      WebhookDeliveryStatus @default(PENDING)
+  attempts    Int                   @default(0)
+  lastError   String?
   deliveredAt DateTime?
-  endpoint   WebhookEndpoint       @relation(fields: [endpointId], references: [id], onDelete: Cascade)
-  createdAt  DateTime              @default(now())
-  updatedAt  DateTime              @updatedAt
+  endpoint    WebhookEndpoint       @relation(fields: [endpointId], references: [id], onDelete: Cascade)
+  createdAt   DateTime              @default(now())
+  updatedAt   DateTime              @updatedAt
 
   @@index([endpointId, createdAt])
 }
@@ -241,4 +262,21 @@ model Settlement {
   updatedAt  DateTime         @updatedAt
 
   @@index([merchantId, createdAt])
+}
+
+model AuditLog {
+  id         String    @id @default(cuid())
+  merchantId String
+  userId     String?
+  action     String
+  resource   String
+  resourceId String?
+  metadata   Json?
+  ipAddress  String?
+  merchant   Merchant  @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  user       User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  createdAt  DateTime  @default(now())
+
+  @@index([merchantId, createdAt])
+  @@index([userId, createdAt])
 }
