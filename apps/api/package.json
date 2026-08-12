@@ -1,6 +1,6 @@
 {
   "name": "@retaillink/api",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -8,6 +8,7 @@
     "start": "tsx src/server.ts"
   },
   "dependencies": {
+    "@fastify/cookie": "^11.0.2",
     "@fastify/cors": "^11.1.0",
     "@retaillink/database": "workspace:*",
     "@retaillink/payment-core": "workspace:*",
