@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: retaillink
+          POSTGRES_PASSWORD: retaillink_dev
+          POSTGRES_DB: retaillink_terminal
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U retaillink -d retaillink_terminal"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://retaillink:retaillink_dev@localhost:5432/retaillink_terminal?schema=public
+      CHECKOUT_BASE_URL: http://localhost:3002
+      NEXT_PUBLIC_API_URL: http://localhost:3001
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.15.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --no-frozen-lockfile
+      - run: pnpm db:generate
+      - run: pnpm --filter @retaillink/database exec prisma validate
+      - run: pnpm --filter @retaillink/database exec prisma db push --skip-generate
+      - run: pnpm db:seed
+      - run: pnpm build
