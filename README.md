@@ -50,6 +50,8 @@ macOS/Linux:
 ```bash
 cp packages/database/.env.example packages/database/.env
 cp apps/api/.env.example apps/api/.env
+cp apps/dashboard/.env.example apps/dashboard/.env.local
+cp apps/checkout/.env.example apps/checkout/.env.local
 ```
 
 Windows PowerShell:
@@ -57,6 +59,8 @@ Windows PowerShell:
 ```powershell
 Copy-Item packages/database/.env.example packages/database/.env
 Copy-Item apps/api/.env.example apps/api/.env
+Copy-Item apps/dashboard/.env.example apps/dashboard/.env.local
+Copy-Item apps/checkout/.env.example apps/checkout/.env.local
 ```
 
 ### 3. Start PostgreSQL

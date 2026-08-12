@@ -12,7 +12,21 @@ type Session = {
   description?: string | null;
   merchant_reference?: string | null;
   status: string;
+  action_token?: string | null;
 };
+
+async function checkoutRequest(path: string, options: RequestInit = {}) {
+  const headers = new Headers(options.headers);
+  if (options.body != null && !headers.has('content-type')) {
+    headers.set('content-type', 'application/json');
+  }
+  const response = await fetch(`${API_URL}${path}`, { ...options, headers });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(data.error?.message ?? `Checkout request failed (${response.status}).`);
+  }
+  return data;
+}
 
 export default function CheckoutPage({ params }: { params: Promise<{ token: string }> }) {
   const [token, setToken] = useState('');
@@ -23,6 +37,7 @@ export default function CheckoutPage({ params }: { params: Promise<{ token: stri
   const [status, setStatus] = useState('loading');
   const [message, setMessage] = useState('');
   const [actionToken, setActionToken] = useState<string | null>(null);
+  const [actionBusy, setActionBusy] = useState(false);
 
   useEffect(() => {
     params.then(({ token: value }) => setToken(value));
@@ -30,14 +45,11 @@ export default function CheckoutPage({ params }: { params: Promise<{ token: stri
 
   useEffect(() => {
     if (!token) return;
-    fetch(`${API_URL}/checkout/${token}`)
-      .then(async (response) => {
-        if (!response.ok) throw new Error('Checkout session not found.');
-        return response.json();
-      })
+    checkoutRequest(`/checkout/${token}`)
       .then((data) => {
         setSession(data);
-        setStatus(data.status === 'succeeded' ? 'succeeded' : 'ready');
+        setActionToken(data.action_token ?? null);
+        setStatus(data.status === 'succeeded' ? 'succeeded' : data.status === 'requires_action' ? 'requires_action' : 'ready');
       })
       .catch((error) => {
         setMessage(error.message);
@@ -58,41 +70,38 @@ export default function CheckoutPage({ params }: { params: Promise<{ token: stri
     event.preventDefault();
     setStatus('processing');
     setMessage('');
-    const response = await fetch(`${API_URL}/checkout/${token}/confirm`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ card_number: cardNumber, expiry, cvc }),
-    });
-    const data = await response.json();
-
-    if (data.status === 'requires_action') {
-      setActionToken(data.action_token);
-      setStatus('requires_action');
-      return;
-    }
-    if (!response.ok) {
+    try {
+      const data = await checkoutRequest(`/checkout/${token}/confirm`, {
+        method: 'POST',
+        body: JSON.stringify({ card_number: cardNumber, expiry, cvc }),
+      });
+      if (data.status === 'requires_action') {
+        setActionToken(data.action_token);
+        setStatus('requires_action');
+        return;
+      }
+      setStatus('succeeded');
+    } catch (error) {
       setStatus('ready');
-      setMessage(data.error?.message ?? 'Payment failed.');
-      return;
+      setMessage(error instanceof Error ? error.message : 'Payment failed.');
     }
-    setStatus('succeeded');
   }
 
   async function complete3ds() {
     if (!actionToken) return;
-    setStatus('processing');
-    const response = await fetch(`${API_URL}/checkout/${token}/3ds/complete`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ action_token: actionToken }),
-    });
-    const data = await response.json();
-    if (!response.ok) {
-      setStatus('requires_action');
-      setMessage(data.error?.message ?? '3DS simulation failed.');
-      return;
+    setActionBusy(true);
+    setMessage('');
+    try {
+      await checkoutRequest(`/checkout/${token}/3ds/complete`, {
+        method: 'POST',
+        body: JSON.stringify({ action_token: actionToken }),
+      });
+      setStatus('succeeded');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : '3DS simulation failed.');
+    } finally {
+      setActionBusy(false);
     }
-    setStatus('succeeded');
   }
 
   if (status === 'loading') return <main className="shell"><div className="card">Loading checkout…</div></main>;
@@ -114,7 +123,8 @@ export default function CheckoutPage({ params }: { params: Promise<{ token: stri
           <div className="threeDs">
             <h2>Demo 3D Secure</h2>
             <p>In production this step would be handled by the card issuer. Click below to simulate successful authentication.</p>
-            <button onClick={complete3ds}>Complete test authentication</button>
+            {message && <div className="error" role="alert">{message}</div>}
+            <button onClick={complete3ds} disabled={actionBusy}>{actionBusy ? 'Completing…' : 'Complete test authentication'}</button>
           </div>
         ) : (
           <form onSubmit={pay}>
@@ -123,7 +133,7 @@ export default function CheckoutPage({ params }: { params: Promise<{ token: stri
               <label>Expiry<input value={expiry} onChange={(e) => setExpiry(e.target.value)} autoComplete="off" /></label>
               <label>CVC<input value={cvc} onChange={(e) => setCvc(e.target.value)} autoComplete="off" /></label>
             </div>
-            {message && <div className="error">{message}</div>}
+            {message && <div className="error" role="alert">{message}</div>}
             <button disabled={status === 'processing'}>{status === 'processing' ? 'Processing…' : `Pay ${formattedAmount}`}</button>
           </form>
         )}

@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import { createHash, createHmac, randomBytes, randomUUID, scryptSync, timingSafeEqual } from 'node:crypto';
+import { lookup } from 'node:dns/promises';
 import Fastify, { type FastifyRequest } from 'fastify';
 import cors from '@fastify/cors';
 import cookie from '@fastify/cookie';
@@ -9,8 +10,25 @@ import { completeDemo3ds, processDemoCard, sandboxCards } from '@retaillink/paym
 
 const app = Fastify({ logger: true });
 const dashboardOrigin = process.env.DASHBOARD_ORIGIN ?? 'http://localhost:3000';
-await app.register(cors, { origin: dashboardOrigin, credentials: true });
+const checkoutOrigin = process.env.CHECKOUT_BASE_URL ?? 'http://localhost:3002';
+await app.register(cors, {
+  origin: [dashboardOrigin, checkoutOrigin],
+  credentials: true,
+  methods: ['GET', 'HEAD', 'POST', 'DELETE', 'OPTIONS'],
+});
 await app.register(cookie);
+app.setErrorHandler((error, request, reply) => {
+  request.log.error(error);
+  const apiError = error as { statusCode?: number; message?: string };
+  if (apiError.statusCode && apiError.statusCode < 500) {
+    return reply.code(apiError.statusCode).send({
+      error: { type: 'invalid_request_error', message: apiError.message ?? 'Invalid request.' },
+    });
+  }
+  return reply.code(500).send({
+    error: { type: 'api_error', message: 'An internal API error occurred.' },
+  });
+});
 
 const SESSION_COOKIE = 'rt_session';
 const SESSION_DAYS = 7;
@@ -35,12 +53,13 @@ const signupSchema = z.object({
 const loginSchema = z.object({ email: z.string().email(), password: z.string().min(1) });
 const createApiKeySchema = z.object({ name: z.string().trim().min(1).max(80).default('Sandbox key') });
 const createPaymentIntentSchema = z.object({
-  amount: z.number().int().positive(),
+  amount: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
   currency: z.string().length(3).default('LKR'),
   merchant_reference: z.string().max(255).optional(),
   description: z.string().max(500).optional(),
-  metadata: z.record(z.string(), z.unknown()).optional(),
+  metadata: z.record(z.string(), z.json()).optional(),
 });
+const idempotencyKeySchema = z.string().trim().min(1).max(255);
 const cardSchema = z.object({
   card_number: z.string().min(12).max(24),
   expiry: z.string().min(4).max(7),
@@ -65,6 +84,59 @@ function verifyPassword(password: string, stored: string) {
 
 function hashToken(token: string) {
   return createHash('sha256').update(token).digest('hex');
+}
+
+function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
+  if (value && typeof value === 'object') {
+    return `{${Object.entries(value as Record<string, unknown>)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, entry]) => `${JSON.stringify(key)}:${canonicalJson(entry)}`)
+      .join(',')}}`;
+  }
+  return JSON.stringify(value) ?? 'null';
+}
+
+function paymentIntentMatches(row: any, data: z.infer<typeof createPaymentIntentSchema>) {
+  return row.amount === BigInt(data.amount)
+    && row.currency === data.currency.toUpperCase()
+    && row.merchantReference === (data.merchant_reference ?? null)
+    && row.description === (data.description ?? null)
+    && canonicalJson(row.metadata ?? null) === canonicalJson(data.metadata ?? null);
+}
+
+function isUniqueConstraintError(error: unknown) {
+  return typeof error === 'object' && error !== null && 'code' in error && error.code === 'P2002';
+}
+
+function isPrivateAddress(input: string) {
+  const address = input.toLowerCase().replace(/^::ffff:/, '');
+  if (address.includes(':')) {
+    return address === '::' || address === '::1' || address.startsWith('fc') || address.startsWith('fd') || /^fe[89ab]/.test(address);
+  }
+  const octets = address.split('.').map(Number);
+  if (octets.length !== 4 || octets.some((octet) => !Number.isInteger(octet) || octet < 0 || octet > 255)) return true;
+  const [first, second] = octets;
+  return first === 0
+    || first === 10
+    || first === 127
+    || (first === 100 && second >= 64 && second <= 127)
+    || (first === 169 && second === 254)
+    || (first === 172 && second >= 16 && second <= 31)
+    || (first === 192 && second === 168)
+    || first >= 224;
+}
+
+async function isSafeWebhookUrl(input: string) {
+  const url = new URL(input);
+  if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) return false;
+  if (url.hostname.toLowerCase() === 'localhost' || url.hostname.endsWith('.localhost')) return false;
+  try {
+    const addresses = await lookup(url.hostname, { all: true });
+    return addresses.length > 0 && addresses.every(({ address }) => !isPrivateAddress(address));
+  } catch {
+    return false;
+  }
 }
 
 function sessionExpiry() {
@@ -251,25 +323,52 @@ app.post('/v1/payment_intents', async (request, reply) => {
   const parsed = createPaymentIntentSchema.safeParse(request.body);
   if (!parsed.success) return reply.code(400).send(validationError(parsed.error.flatten()));
 
-  const idempotencyKey = request.headers['idempotency-key'] as string | undefined;
+  const rawIdempotencyKey = request.headers['idempotency-key'];
+  const parsedIdempotencyKey = rawIdempotencyKey === undefined
+    ? { success: true as const, data: undefined }
+    : idempotencyKeySchema.safeParse(rawIdempotencyKey);
+  if (!parsedIdempotencyKey.success) {
+    return reply.code(400).send(validationError(parsedIdempotencyKey.error.flatten()));
+  }
+  const idempotencyKey = parsedIdempotencyKey.data;
   if (idempotencyKey) {
     const existing = await prisma.paymentIntent.findUnique({ where: { merchantId_idempotencyKey: { merchantId: auth.merchantId, idempotencyKey } } });
-    if (existing) return serializePaymentIntent(existing);
+    if (existing) {
+      if (!paymentIntentMatches(existing, parsed.data)) {
+        return reply.code(409).send({
+          error: { type: 'idempotency_error', message: 'This idempotency key was already used with different request parameters.' },
+        });
+      }
+      return serializePaymentIntent(existing);
+    }
   }
 
-  const paymentIntent = await prisma.paymentIntent.create({
-    data: {
-      merchantId: auth.merchantId,
-      environment: 'TEST',
-      amount: BigInt(parsed.data.amount),
-      currency: parsed.data.currency.toUpperCase(),
-      merchantReference: parsed.data.merchant_reference,
-      description: parsed.data.description,
-      metadata: parsed.data.metadata,
-      checkoutToken: `ct_test_${randomBytes(24).toString('hex')}`,
-      idempotencyKey,
-    },
-  });
+  let paymentIntent;
+  try {
+    paymentIntent = await prisma.paymentIntent.create({
+      data: {
+        merchantId: auth.merchantId,
+        environment: 'TEST',
+        amount: BigInt(parsed.data.amount),
+        currency: parsed.data.currency.toUpperCase(),
+        merchantReference: parsed.data.merchant_reference,
+        description: parsed.data.description,
+        metadata: parsed.data.metadata,
+        checkoutToken: `ct_test_${randomBytes(24).toString('hex')}`,
+        idempotencyKey,
+      },
+    });
+  } catch (error) {
+    if (!idempotencyKey || !isUniqueConstraintError(error)) throw error;
+    const existing = await prisma.paymentIntent.findUnique({ where: { merchantId_idempotencyKey: { merchantId: auth.merchantId, idempotencyKey } } });
+    if (!existing) throw error;
+    if (!paymentIntentMatches(existing, parsed.data)) {
+      return reply.code(409).send({
+        error: { type: 'idempotency_error', message: 'This idempotency key was already used with different request parameters.' },
+      });
+    }
+    return serializePaymentIntent(existing);
+  }
   if (auth.source === 'session') await audit(auth.merchantId, auth.userId, 'payment_intent.created', 'payment_intent', paymentIntent.id, { amount: parsed.data.amount, currency: parsed.data.currency }, request.ip);
   return reply.code(201).send(serializePaymentIntent(paymentIntent));
 });
@@ -316,8 +415,12 @@ app.get('/v1/refunds', async (request, reply) => {
 app.get('/v1/balance', async (request, reply) => {
   const auth = await authenticate(request);
   if (!auth) return reply.code(401).send(authError());
-  const account = await prisma.ledgerAccount.findUnique({ where: { merchantId_code_currency: { merchantId: auth.merchantId, code: 'MERCHANT_PAYABLE', currency: 'LKR' } } });
-  if (!account) return { object: 'balance', available: '0', currency: 'LKR' };
+  const parsed = z.object({ currency: z.string().length(3).optional() }).safeParse(request.query);
+  if (!parsed.success) return reply.code(400).send(validationError(parsed.error.flatten()));
+  const merchant = await prisma.merchant.findUnique({ where: { id: auth.merchantId }, select: { defaultCurrency: true } });
+  const currency = (parsed.data.currency ?? merchant?.defaultCurrency ?? 'LKR').toUpperCase();
+  const account = await prisma.ledgerAccount.findUnique({ where: { merchantId_code_currency: { merchantId: auth.merchantId, code: 'MERCHANT_PAYABLE', currency } } });
+  if (!account) return { object: 'balance', available: '0', currency };
   const entries = await prisma.ledgerEntry.findMany({ where: { accountId: account.id } });
   const available = entries.reduce((sum, entry) => sum + (entry.direction === 'CREDIT' ? entry.amount : -entry.amount), 0n);
   return { object: 'balance', available: available.toString(), currency: account.currency };
@@ -334,7 +437,16 @@ app.get('/checkout/:token', async (request, reply) => {
   const { token } = request.params as { token: string };
   const row = await prisma.paymentIntent.findUnique({ where: { checkoutToken: token }, include: { merchant: { select: { name: true } } } });
   if (!row || row.environment !== 'TEST') return reply.code(404).send(notFound('checkout_session'));
-  return { id: row.id, merchant_name: row.merchant.name, amount: row.amount.toString(), currency: row.currency, description: row.description, merchant_reference: row.merchantReference, status: row.status.toLowerCase() };
+  return {
+    id: row.id,
+    merchant_name: row.merchant.name,
+    amount: row.amount.toString(),
+    currency: row.currency,
+    description: row.description,
+    merchant_reference: row.merchantReference,
+    status: row.status.toLowerCase(),
+    action_token: row.status === 'REQUIRES_ACTION' ? row.actionToken : null,
+  };
 });
 
 app.post('/checkout/:token/confirm', async (request, reply) => {
@@ -347,10 +459,28 @@ app.post('/checkout/:token/confirm', async (request, reply) => {
     const payment = await prisma.payment.findFirst({ where: { paymentIntentId: intent.id, status: 'SUCCEEDED' } });
     return { status: 'succeeded', payment: payment ? serializePayment(payment) : null };
   }
+  if (intent.status === 'REQUIRES_ACTION') {
+    return reply.code(409).send({
+      error: { type: 'invalid_state', message: 'Complete the pending 3DS challenge before confirming this payment again.' },
+    });
+  }
+  if (intent.status === 'PROCESSING' || intent.status === 'CANCELED') {
+    return reply.code(409).send({
+      error: { type: 'invalid_state', message: `This payment cannot be confirmed while it is ${intent.status.toLowerCase()}.` },
+    });
+  }
 
   const result = processDemoCard(parsed.data.card_number);
   if (result.outcome === 'requires_action') {
-    await prisma.paymentIntent.update({ where: { id: intent.id }, data: { status: 'REQUIRES_ACTION' } });
+    await prisma.paymentIntent.update({
+      where: { id: intent.id },
+      data: {
+        status: 'REQUIRES_ACTION',
+        actionToken: result.actionToken,
+        actionCardBrand: result.brand,
+        actionCardLast4: result.last4,
+      },
+    });
     return { status: 'requires_action', action_token: result.actionToken, test_only: true };
   }
   if (result.outcome === 'declined') {
@@ -360,9 +490,9 @@ app.post('/checkout/:token/confirm', async (request, reply) => {
     ]);
     return reply.code(402).send({ error: { type: 'card_error', code: result.code, message: result.message } });
   }
-  const payment = await recordSuccessfulPayment(intent, result.brand, result.last4, result.processorRef);
-  await emitWebhook(intent.merchantId, 'payment.succeeded', serializePayment(payment));
-  return { status: 'succeeded', payment: serializePayment(payment) };
+  const recorded = await recordSuccessfulPayment(intent, result.brand, result.last4, result.processorRef);
+  if (recorded.created) await emitWebhook(intent.merchantId, 'payment.succeeded', serializePayment(recorded.payment));
+  return { status: 'succeeded', payment: serializePayment(recorded.payment) };
 });
 
 app.post('/checkout/:token/3ds/complete', async (request, reply) => {
@@ -372,10 +502,20 @@ app.post('/checkout/:token/3ds/complete', async (request, reply) => {
   const intent = await prisma.paymentIntent.findUnique({ where: { checkoutToken: token } });
   if (!intent || intent.environment !== 'TEST') return reply.code(404).send(notFound('checkout_session'));
   if (intent.status !== 'REQUIRES_ACTION') return reply.code(409).send({ error: { type: 'invalid_state', message: 'Payment does not require 3DS.' } });
+  if (!intent.actionToken || parsed.data.action_token !== intent.actionToken) {
+    return reply.code(400).send({
+      error: { type: 'invalid_request_error', message: 'Invalid sandbox 3DS token.' },
+    });
+  }
   const result = completeDemo3ds(parsed.data.action_token);
-  const payment = await recordSuccessfulPayment(intent, 'visa', '3155', result.processorRef);
-  await emitWebhook(intent.merchantId, 'payment.succeeded', serializePayment(payment));
-  return { status: 'succeeded', payment: serializePayment(payment) };
+  const recorded = await recordSuccessfulPayment(
+    intent,
+    intent.actionCardBrand ?? 'visa',
+    intent.actionCardLast4 ?? '3155',
+    result.processorRef,
+  );
+  if (recorded.created) await emitWebhook(intent.merchantId, 'payment.succeeded', serializePayment(recorded.payment));
+  return { status: 'succeeded', payment: serializePayment(recorded.payment) };
 });
 
 app.post('/v1/payments/:id/refunds', async (request, reply) => {
@@ -391,12 +531,31 @@ app.post('/v1/payments/:id/refunds', async (request, reply) => {
   if (amount <= 0n || amount > remaining) return reply.code(400).send({ error: { type: 'invalid_request_error', message: 'Refund amount exceeds the refundable balance.' } });
 
   const refund = await prisma.$transaction(async (tx) => {
+    const claimed = await tx.payment.updateMany({
+      where: {
+        id: payment.id,
+        merchantId: auth.merchantId,
+        status: { in: ['SUCCEEDED', 'PARTIALLY_REFUNDED'] },
+        refundedAmount: { lte: payment.amount - amount },
+      },
+      data: { refundedAmount: { increment: amount } },
+    });
+    if (claimed.count === 0) return null;
+
+    const updatedPayment = await tx.payment.findUniqueOrThrow({ where: { id: payment.id } });
     const row = await tx.refund.create({ data: { merchantId: payment.merchantId, paymentId: payment.id, amount, currency: payment.currency, status: 'SUCCEEDED', reason: parsed.data.reason } });
-    const newRefunded = payment.refundedAmount + amount;
-    await tx.payment.update({ where: { id: payment.id }, data: { refundedAmount: newRefunded, status: newRefunded === payment.amount ? 'REFUNDED' : 'PARTIALLY_REFUNDED' } });
-    await postRefundLedger(tx, payment.merchantId, payment.currency, amount, row.id);
+    await tx.payment.update({
+      where: { id: payment.id },
+      data: { status: updatedPayment.refundedAmount === payment.amount ? 'REFUNDED' : 'PARTIALLY_REFUNDED' },
+    });
+    await postRefundLedger(tx, updatedPayment, amount, row.id);
     return row;
   });
+  if (!refund) {
+    return reply.code(409).send({
+      error: { type: 'invalid_state', message: 'The refundable balance changed. Refresh the payment and try again.' },
+    });
+  }
   if (auth.source === 'session') await audit(auth.merchantId, auth.userId, 'refund.created', 'refund', refund.id, { payment_id: payment.id, amount: amount.toString() }, request.ip);
   await emitWebhook(payment.merchantId, 'refund.succeeded', serializeRefund(refund));
   return reply.code(201).send(serializeRefund(refund));
@@ -407,6 +566,11 @@ app.post('/v1/webhook_endpoints', async (request, reply) => {
   if (!auth) return reply.code(401).send(authError());
   const parsed = webhookSchema.safeParse(request.body);
   if (!parsed.success) return reply.code(400).send(validationError(parsed.error.flatten()));
+  if (!(await isSafeWebhookUrl(parsed.data.url))) {
+    return reply.code(400).send({
+      error: { type: 'invalid_request_error', message: 'Webhook URL must resolve to a public HTTP or HTTPS address.' },
+    });
+  }
   const secret = `whsec_test_${randomBytes(24).toString('hex')}`;
   const endpoint = await prisma.webhookEndpoint.create({ data: { merchantId: auth.merchantId, url: parsed.data.url, secret } });
   if (auth.source === 'session') await audit(auth.merchantId, auth.userId, 'webhook.created', 'webhook_endpoint', endpoint.id, { url: endpoint.url }, request.ip);
@@ -440,20 +604,39 @@ app.get('/v1/webhook_deliveries', async (request, reply) => {
 });
 
 async function recordSuccessfulPayment(intent: { id: string; merchantId: string; amount: bigint; currency: string }, brand: string, last4: string, processorRef: string) {
-  const existing = await prisma.payment.findFirst({ where: { paymentIntentId: intent.id, status: 'SUCCEEDED' } });
-  if (existing) return existing;
   return prisma.$transaction(async (tx) => {
+    const claimed = await tx.paymentIntent.updateMany({
+      where: {
+        id: intent.id,
+        status: { in: ['REQUIRES_PAYMENT_METHOD', 'REQUIRES_CONFIRMATION', 'REQUIRES_ACTION', 'FAILED'] },
+      },
+      data: { status: 'PROCESSING' },
+    });
+    if (claimed.count === 0) {
+      const existing = await tx.payment.findFirst({ where: { paymentIntentId: intent.id, status: 'SUCCEEDED' } });
+      if (existing) return { payment: existing, created: false };
+      throw new Error('Payment intent is already being processed.');
+    }
+
     const payment = await tx.payment.create({ data: { merchantId: intent.merchantId, paymentIntentId: intent.id, amount: intent.amount, currency: intent.currency, status: 'SUCCEEDED', processor: 'DEMO', processorRef, cardBrand: brand, cardLast4: last4 } });
-    await tx.paymentIntent.update({ where: { id: intent.id }, data: { status: 'SUCCEEDED' } });
+    await tx.paymentIntent.update({
+      where: { id: intent.id },
+      data: { status: 'SUCCEEDED', actionToken: null, actionCardBrand: null, actionCardLast4: null },
+    });
     await postPaymentLedger(tx, intent.merchantId, intent.currency, intent.amount, payment.id);
-    return payment;
+    return { payment, created: true };
   });
 }
 
-async function postPaymentLedger(tx: any, merchantId: string, currency: string, gross: bigint, paymentId: string) {
+function calculatePaymentFee(gross: bigint, currency: string) {
   const percentageFee = (gross * 250n) / 10000n;
   const fixedFee = currency === 'LKR' ? 3000n : 30n;
-  const fee = percentageFee + fixedFee < gross ? percentageFee + fixedFee : 0n;
+  const candidate = percentageFee + fixedFee;
+  return candidate < gross ? candidate : 0n;
+}
+
+async function postPaymentLedger(tx: any, merchantId: string, currency: string, gross: bigint, paymentId: string) {
+  const fee = calculatePaymentFee(gross, currency);
   const net = gross - fee;
   const accounts = await getAccounts(tx, merchantId, currency);
   const transactionId = `txn_${randomUUID()}`;
@@ -464,12 +647,24 @@ async function postPaymentLedger(tx: any, merchantId: string, currency: string, 
   ] });
 }
 
-async function postRefundLedger(tx: any, merchantId: string, currency: string, amount: bigint, refundId: string) {
-  const accounts = await getAccounts(tx, merchantId, currency);
+async function postRefundLedger(
+  tx: any,
+  payment: { merchantId: string; currency: string; amount: bigint; refundedAmount: bigint },
+  amount: bigint,
+  refundId: string,
+) {
+  const accounts = await getAccounts(tx, payment.merchantId, payment.currency);
+  const net = payment.amount - calculatePaymentFee(payment.amount, payment.currency);
+  const previousRefunded = payment.refundedAmount - amount;
+  const previousNetRefunded = (net * previousRefunded) / payment.amount;
+  const newNetRefunded = (net * payment.refundedAmount) / payment.amount;
+  const merchantRefund = newNetRefunded - previousNetRefunded;
+  const feeRefund = amount - merchantRefund;
   const transactionId = `txn_${randomUUID()}`;
   await tx.ledgerEntry.createMany({ data: [
-    { transactionId, accountId: accounts.merchant.id, direction: 'DEBIT', amount, currency, referenceType: 'refund', referenceId: refundId },
-    { transactionId, accountId: accounts.processor.id, direction: 'CREDIT', amount, currency, referenceType: 'refund', referenceId: refundId },
+    ...(merchantRefund > 0n ? [{ transactionId, accountId: accounts.merchant.id, direction: 'DEBIT', amount: merchantRefund, currency: payment.currency, referenceType: 'refund', referenceId: refundId }] : []),
+    ...(feeRefund > 0n ? [{ transactionId, accountId: accounts.fee.id, direction: 'DEBIT', amount: feeRefund, currency: payment.currency, referenceType: 'refund', referenceId: refundId }] : []),
+    { transactionId, accountId: accounts.processor.id, direction: 'CREDIT', amount, currency: payment.currency, referenceType: 'refund', referenceId: refundId },
   ] });
 }
 
@@ -496,6 +691,7 @@ async function emitWebhook(merchantId: string, eventType: string, data: unknown)
     const signature = createHmac('sha256', endpoint.secret).update(`${timestamp}.${body}`).digest('hex');
     const delivery = await prisma.webhookDelivery.create({ data: { endpointId: endpoint.id, eventId, eventType, payload: payload as any, attempts: 1 } });
     try {
+      if (!(await isSafeWebhookUrl(endpoint.url))) throw new Error('Webhook URL no longer resolves to a public address.');
       const response = await fetch(endpoint.url, { method: 'POST', headers: { 'content-type': 'application/json', 'x-retaillink-signature': `t=${timestamp},v1=${signature}` }, body, signal: AbortSignal.timeout(5000) });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       await prisma.webhookDelivery.update({ where: { id: delivery.id }, data: { status: 'DELIVERED', deliveredAt: new Date() } });
@@ -529,7 +725,11 @@ function notFound(object: string) {
 }
 
 const port = Number(process.env.PORT ?? 3001);
-app.listen({ port, host: '0.0.0.0' }).catch((error) => {
-  app.log.error(error);
-  process.exit(1);
-});
+if (process.env.NODE_ENV !== 'test') {
+  app.listen({ port, host: '0.0.0.0' }).catch((error) => {
+    app.log.error(error);
+    process.exit(1);
+  });
+}
+
+export { app };

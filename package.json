@@ -12,6 +12,11 @@
     "db:migrate": "pnpm --filter @retaillink/database prisma:migrate",
     "db:seed": "pnpm --filter @retaillink/database seed",
     "db:studio": "pnpm --filter @retaillink/database prisma:studio",
+    "test": "vitest run",
+    "typecheck": "pnpm --filter @retaillink/api typecheck",
     "build": "pnpm --filter @retaillink/sdk build && pnpm --filter @retaillink/dashboard build && pnpm --filter @retaillink/checkout build"
+  },
+  "devDependencies": {
+    "vitest": "^4.1.10"
   }
 }

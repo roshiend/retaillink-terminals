@@ -139,6 +139,9 @@ model PaymentIntent {
   checkoutToken     String              @unique
   idempotencyKey    String?
   metadata          Json?
+  actionToken       String?
+  actionCardBrand   String?
+  actionCardLast4   String?
   merchant          Merchant            @relation(fields: [merchantId], references: [id], onDelete: Restrict)
   payments          Payment[]
   createdAt         DateTime            @default(now())
