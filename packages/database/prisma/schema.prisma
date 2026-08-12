@@ -1,0 +1,90 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Environment {
+  TEST
+  LIVE
+}
+
+enum PaymentIntentStatus {
+  REQUIRES_PAYMENT_METHOD
+  REQUIRES_CONFIRMATION
+  REQUIRES_ACTION
+  PROCESSING
+  SUCCEEDED
+  CANCELED
+}
+
+model User {
+  id           String           @id @default(cuid())
+  email        String           @unique
+  passwordHash String
+  memberships MerchantUser[]
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+}
+
+model Merchant {
+  id             String          @id @default(cuid())
+  name           String
+  country        String          @default("LK")
+  defaultCurrency String         @default("LKR")
+  memberships    MerchantUser[]
+  apiKeys        ApiKey[]
+  paymentIntents PaymentIntent[]
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+}
+
+model MerchantUser {
+  id         String   @id @default(cuid())
+  userId     String
+  merchantId String
+  role       String   @default("OWNER")
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  merchant   Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+
+  @@unique([userId, merchantId])
+}
+
+model ApiKey {
+  id         String      @id @default(cuid())
+  merchantId String
+  environment Environment @default(TEST)
+  name       String
+  prefix     String
+  keyHash    String      @unique
+  lastUsedAt DateTime?
+  revokedAt  DateTime?
+  merchant   Merchant    @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  createdAt  DateTime    @default(now())
+
+  @@index([merchantId, environment])
+}
+
+model PaymentIntent {
+  id                String              @id @default(cuid())
+  merchantId        String
+  environment       Environment         @default(TEST)
+  amount            BigInt
+  currency          String              @default("LKR")
+  status            PaymentIntentStatus @default(REQUIRES_PAYMENT_METHOD)
+  merchantReference String?
+  description       String?
+  checkoutToken     String              @unique
+  idempotencyKey    String?
+  metadata          Json?
+  merchant          Merchant            @relation(fields: [merchantId], references: [id], onDelete: Restrict)
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  @@unique([merchantId, idempotencyKey])
+  @@index([merchantId, createdAt])
+}
