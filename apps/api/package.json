@@ -1,0 +1,20 @@
+{
+  "name": "@retaillink/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "start": "tsx src/server.ts"
+  },
+  "dependencies": {
+    "@retaillink/database": "workspace:*",
+    "dotenv": "^16.6.1",
+    "fastify": "^5.5.0",
+    "zod": "^4.1.5"
+  },
+  "devDependencies": {
+    "tsx": "^4.20.5",
+    "typescript": "^5.9.2"
+  }
+}
