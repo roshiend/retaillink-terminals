@@ -1,0 +1,12 @@
+{
+  "name": "retaillink-terminals",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@10.15.0",
+  "scripts": {
+    "dev:api": "pnpm --filter @retaillink/api dev",
+    "db:generate": "pnpm --filter @retaillink/database prisma:generate",
+    "db:migrate": "pnpm --filter @retaillink/database prisma:migrate",
+    "db:studio": "pnpm --filter @retaillink/database prisma:studio"
+  }
+}
