@@ -19,6 +19,38 @@ enum PaymentIntentStatus {
   PROCESSING
   SUCCEEDED
   CANCELED
+  FAILED
+}
+
+enum PaymentStatus {
+  PROCESSING
+  SUCCEEDED
+  FAILED
+  PARTIALLY_REFUNDED
+  REFUNDED
+}
+
+enum RefundStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+}
+
+enum WebhookDeliveryStatus {
+  PENDING
+  DELIVERED
+  FAILED
+}
+
+enum LedgerEntryDirection {
+  DEBIT
+  CREDIT
+}
+
+enum SettlementStatus {
+  PENDING
+  PAID
+  FAILED
 }
 
 model User {
@@ -31,15 +63,20 @@ model User {
 }
 
 model Merchant {
-  id             String          @id @default(cuid())
-  name           String
-  country        String          @default("LK")
-  defaultCurrency String         @default("LKR")
-  memberships    MerchantUser[]
-  apiKeys        ApiKey[]
-  paymentIntents PaymentIntent[]
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
+  id               String            @id @default(cuid())
+  name             String
+  country          String            @default("LK")
+  defaultCurrency  String            @default("LKR")
+  memberships      MerchantUser[]
+  apiKeys          ApiKey[]
+  paymentIntents   PaymentIntent[]
+  payments         Payment[]
+  refunds          Refund[]
+  webhookEndpoints WebhookEndpoint[]
+  ledgerAccounts   LedgerAccount[]
+  settlements      Settlement[]
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
 }
 
 model MerchantUser {
@@ -55,16 +92,16 @@ model MerchantUser {
 }
 
 model ApiKey {
-  id         String      @id @default(cuid())
-  merchantId String
+  id          String      @id @default(cuid())
+  merchantId  String
   environment Environment @default(TEST)
-  name       String
-  prefix     String
-  keyHash    String      @unique
-  lastUsedAt DateTime?
-  revokedAt  DateTime?
-  merchant   Merchant    @relation(fields: [merchantId], references: [id], onDelete: Cascade)
-  createdAt  DateTime    @default(now())
+  name        String
+  prefix      String
+  keyHash     String      @unique
+  lastUsedAt  DateTime?
+  revokedAt   DateTime?
+  merchant    Merchant    @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  createdAt   DateTime    @default(now())
 
   @@index([merchantId, environment])
 }
@@ -82,9 +119,126 @@ model PaymentIntent {
   idempotencyKey    String?
   metadata          Json?
   merchant          Merchant            @relation(fields: [merchantId], references: [id], onDelete: Restrict)
+  payments          Payment[]
   createdAt         DateTime            @default(now())
   updatedAt         DateTime            @updatedAt
 
   @@unique([merchantId, idempotencyKey])
+  @@index([merchantId, createdAt])
+}
+
+model Payment {
+  id              String        @id @default(cuid())
+  merchantId      String
+  paymentIntentId String
+  amount          BigInt
+  refundedAmount  BigInt        @default(0)
+  currency        String
+  status          PaymentStatus @default(PROCESSING)
+  processor       String        @default("DEMO")
+  processorRef    String?
+  cardBrand       String?
+  cardLast4       String?
+  failureCode     String?
+  failureMessage  String?
+  merchant        Merchant      @relation(fields: [merchantId], references: [id], onDelete: Restrict)
+  paymentIntent   PaymentIntent @relation(fields: [paymentIntentId], references: [id], onDelete: Restrict)
+  refunds         Refund[]
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([merchantId, createdAt])
+  @@index([paymentIntentId])
+}
+
+model Refund {
+  id         String       @id @default(cuid())
+  merchantId String
+  paymentId  String
+  amount     BigInt
+  currency   String
+  status     RefundStatus @default(PENDING)
+  reason     String?
+  merchant   Merchant     @relation(fields: [merchantId], references: [id], onDelete: Restrict)
+  payment    Payment      @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+
+  @@index([merchantId, createdAt])
+  @@index([paymentId])
+}
+
+model WebhookEndpoint {
+  id         String         @id @default(cuid())
+  merchantId String
+  url        String
+  secret     String
+  enabled    Boolean        @default(true)
+  merchant   Merchant       @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  deliveries WebhookDelivery[]
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+
+  @@index([merchantId])
+}
+
+model WebhookDelivery {
+  id         String                @id @default(cuid())
+  endpointId String
+  eventId    String
+  eventType  String
+  payload    Json
+  status     WebhookDeliveryStatus @default(PENDING)
+  attempts   Int                   @default(0)
+  lastError  String?
+  deliveredAt DateTime?
+  endpoint   WebhookEndpoint       @relation(fields: [endpointId], references: [id], onDelete: Cascade)
+  createdAt  DateTime              @default(now())
+  updatedAt  DateTime              @updatedAt
+
+  @@index([endpointId, createdAt])
+}
+
+model LedgerAccount {
+  id         String        @id @default(cuid())
+  merchantId String?
+  code       String
+  name       String
+  currency   String        @default("LKR")
+  merchant   Merchant?     @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  entries    LedgerEntry[]
+  createdAt  DateTime      @default(now())
+
+  @@unique([merchantId, code, currency])
+}
+
+model LedgerEntry {
+  id            String               @id @default(cuid())
+  transactionId String
+  accountId     String
+  direction     LedgerEntryDirection
+  amount        BigInt
+  currency      String
+  referenceType String
+  referenceId   String
+  account       LedgerAccount        @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  createdAt     DateTime             @default(now())
+
+  @@index([transactionId])
+  @@index([accountId, createdAt])
+}
+
+model Settlement {
+  id         String           @id @default(cuid())
+  merchantId String
+  amount     BigInt
+  currency   String
+  status     SettlementStatus @default(PENDING)
+  periodFrom DateTime
+  periodTo   DateTime
+  merchant   Merchant         @relation(fields: [merchantId], references: [id], onDelete: Restrict)
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
+
   @@index([merchantId, createdAt])
 }
