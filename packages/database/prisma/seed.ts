@@ -2,6 +2,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { config } from 'dotenv';
+import { PrismaClient } from '@prisma/client';
 
 const envCandidates = [
   resolve(process.cwd(), '.env'),
@@ -20,7 +21,6 @@ if (!process.env.DATABASE_URL) {
   );
 }
 
-const { PrismaClient } = await import('@prisma/client');
 const prisma = new PrismaClient();
 
 async function main() {
