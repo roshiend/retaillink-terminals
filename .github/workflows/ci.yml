@@ -28,6 +28,7 @@ jobs:
       DATABASE_URL: postgresql://retaillink:retaillink_dev@localhost:5432/retaillink_terminal?schema=public
       CHECKOUT_BASE_URL: http://localhost:3002
       NEXT_PUBLIC_API_URL: http://localhost:3001
+      DASHBOARD_ORIGIN: http://localhost:3000
 
     steps:
       - uses: actions/checkout@v4
@@ -40,7 +41,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm db:generate
       - run: pnpm --filter @retaillink/database exec prisma validate
-      - run: pnpm --filter @retaillink/database exec prisma db push --skip-generate
+      - run: pnpm --filter @retaillink/database exec prisma migrate deploy
       - run: pnpm db:seed
       - run: pnpm test
       - run: pnpm typecheck
