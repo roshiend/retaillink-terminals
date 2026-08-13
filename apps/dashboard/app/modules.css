@@ -24,6 +24,7 @@
 .roleBadge { display: inline-flex; padding: 5px 8px; background: #eef0f3; border-radius: 999px; font-size: 9px; font-weight: 900; letter-spacing: .05em; }
 .riskRuleSummary { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: start; }
 .riskRuleSummary p { margin: 6px 0 0; color: #707984; font-size: 12px; }
+.status.allowed { background: #e8f8ed; color: #176530; }.status.review { background: #fff3d7; color: #765800; }.status.blocked { background: #ffeded; color: #9f2020; }
 .method { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-weight: 900; font-size: 10px; padding: 4px 6px; border-radius: 5px; background: #eef1f4; }
 .statusCode { font-weight: 900; }.statusCode.ok { color: #176530; }.statusCode.error { color: #9f2020; }
 @media (max-width: 900px) { .consoleLauncher { left: 15px; right: 15px; overflow-x: auto; }.moduleForm, .moduleForm.two { grid-template-columns: 1fr; }.moduleGrid, .moduleGrid.two { grid-template-columns: 1fr; }.moduleShell { padding: 28px 15px 95px; } }
