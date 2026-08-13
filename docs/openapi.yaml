@@ -90,6 +90,20 @@ paths:
       responses:
         '200': { description: Payment intent }
         '404': { description: Not found }
+  /v1/payment_intents/{id}/cancel:
+    post:
+      summary: Cancel an unpaid Payment Intent
+      description: Cancellation is idempotent. Succeeded or processing intents cannot be canceled. For invoice-linked intents, void the invoice instead.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Payment Intent canceled or already canceled }
+        '401': { description: Invalid API key }
+        '404': { description: Payment Intent not found }
+        '409': { description: Payment Intent cannot be canceled in its current state }
   /v1/payments:
     get:
       summary: List payments
