@@ -1,4 +1,6 @@
 import './styles.css';
+import './modules.css';
+import ConsoleLauncher from './console-launcher';
 
 export const metadata = {
   title: 'Retaillink Terminals Dashboard',
@@ -8,7 +10,10 @@ export const metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        {children}
+        <ConsoleLauncher />
+      </body>
     </html>
   );
 }
