@@ -59,6 +59,26 @@ function deny(reply: FastifyReply, role: string, route: string) {
   });
 }
 
+function allowedBrowserOrigin(request: FastifyRequest) {
+  const origin = request.headers.origin;
+  if (!origin) return process.env.NODE_ENV === 'test';
+  const allowed = (process.env.DASHBOARD_ORIGIN ?? 'http://localhost:3000')
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean);
+  return allowed.includes(origin);
+}
+
+function denyOrigin(reply: FastifyReply) {
+  return reply.code(403).send({
+    error: {
+      type: 'permission_error',
+      code: 'invalid_origin',
+      message: 'This session-authenticated write request did not originate from an allowed merchant dashboard origin.',
+    },
+  });
+}
+
 export function registerRbac(app: FastifyInstance) {
   app.addHook('preHandler', async (request, reply) => {
     const route = request.routeOptions.url ?? request.url.split('?', 1)[0];
@@ -67,6 +87,7 @@ export function registerRbac(app: FastifyInstance) {
 
     const role = await sessionRole(request);
     if (!role) return;
+    if (!allowedBrowserOrigin(request)) return denyOrigin(reply);
     if (!required.includes(role)) return deny(reply, role, route);
   });
 }
