@@ -128,15 +128,6 @@ export default function DashboardPage() {
     return data;
   }
 
-  async function dashboardRequest(path: string, options: RequestInit = {}) {
-    const headers = new Headers(options.headers);
-    if (options.body != null && !headers.has('content-type')) headers.set('content-type', 'application/json');
-    const response = await fetch(path, { ...options, credentials: 'include', headers });
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) throw new ApiRequestError(data.error?.message ?? `Request failed (${response.status})`, response.status);
-    return data;
-  }
-
   async function loadSession() {
     try {
       const current = await request('/auth/me');
@@ -160,7 +151,7 @@ export default function DashboardPage() {
         request('/v1/webhook_deliveries'),
         request('/dashboard/audit_logs'),
         request('/v1/balance'),
-        dashboardRequest('/api/settlements'),
+        request('/dashboard/settlements'),
       ]);
       setIntents(intentData.data ?? []);
       setPayments(paymentData.data ?? []);
@@ -337,7 +328,7 @@ export default function DashboardPage() {
     if (!window.confirm('Simulate paying the full available merchant balance?')) return;
     setBusy(true);
     try {
-      const result = await dashboardRequest('/api/settlements', { method: 'POST', body: '{}' });
+      const result = await request('/dashboard/settlements', { method: 'POST', body: '{}' });
       await refreshAll();
       setMessage(`Sandbox settlement ${result.settlement.id} marked paid.`);
     } catch (error) {
@@ -351,7 +342,7 @@ export default function DashboardPage() {
     event.preventDefault();
     setBusy(true);
     try {
-      const result = await dashboardRequest('/api/settings', { method: 'POST', body: JSON.stringify({ name: settingsName }) });
+      const result = await request('/dashboard/settings', { method: 'POST', body: JSON.stringify({ name: settingsName }) });
       setMe((current) => current ? { ...current, merchant: { ...current.merchant, name: result.merchant.name } } : current);
       setMessage('Business settings updated.');
       await refreshAll();
