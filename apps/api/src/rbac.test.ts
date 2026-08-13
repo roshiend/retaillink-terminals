@@ -59,6 +59,17 @@ describe.sequential('merchant role-based access', () => {
     await app.close();
   });
 
+  it('rejects session-authenticated writes from an untrusted browser origin', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/v1/payment_intents',
+      headers: { cookie: ownerCookie, origin: 'https://evil.example' },
+      payload: { amount: 10_000, currency: 'LKR' },
+    });
+    expect(response.statusCode).toBe(403);
+    expect(response.json().error.code).toBe('invalid_origin');
+  });
+
   it('keeps VIEWER read-only', async () => {
     const viewerCookie = await inviteAndAccept('VIEWER');
 
