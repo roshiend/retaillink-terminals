@@ -45,6 +45,7 @@ export class Retaillink {
     },
     list: () => this.request('/v1/payment_intents'),
     retrieve: (id: string) => this.request(`/v1/payment_intents/${encodeURIComponent(id)}`),
+    cancel: (id: string) => this.request(`/v1/payment_intents/${encodeURIComponent(id)}/cancel`, { method: 'POST', body: {} }),
   };
 
   payments = {
