@@ -51,6 +51,16 @@ export class Retaillink {
     list: () => this.request('/v1/refunds'),
   };
 
+  customers = {
+    create: (params: { name?: string; email?: string; phone?: string; metadata?: Record<string, unknown> }) =>
+      this.request('/v1/customers', { method: 'POST', body: params }),
+    list: () => this.request('/v1/customers'),
+    retrieve: (id: string) => this.request(`/v1/customers/${encodeURIComponent(id)}`),
+    update: (id: string, params: { name?: string | null; email?: string | null; phone?: string | null; metadata?: Record<string, unknown> | null }) =>
+      this.request(`/v1/customers/${encodeURIComponent(id)}`, { method: 'POST', body: params }),
+    remove: (id: string) => this.request(`/v1/customers/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  };
+
   balance = {
     retrieve: () => this.request('/v1/balance'),
   };
@@ -71,9 +81,7 @@ export class Retaillink {
       authorization: `Bearer ${this.apiKey}`,
       ...(options.idempotencyKey ? { 'idempotency-key': options.idempotencyKey } : {}),
     };
-    if (options.body !== undefined) {
-      headers['content-type'] = 'application/json';
-    }
+    if (options.body !== undefined) headers['content-type'] = 'application/json';
 
     let response: Response;
     try {
@@ -90,9 +98,7 @@ export class Retaillink {
     try {
       data = await response.json();
     } catch {
-      if (response.ok) {
-        throw new RetaillinkError('The Retaillink API returned an invalid response.', response.status, 'invalid_response');
-      }
+      if (response.ok) throw new RetaillinkError('The Retaillink API returned an invalid response.', response.status, 'invalid_response');
       data = {};
     }
     if (!response.ok) {
