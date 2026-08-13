@@ -34,8 +34,15 @@ export class Retaillink {
   }
 
   paymentIntents = {
-    create: (params: { amount: number; currency?: string; merchant_reference?: string; description?: string; metadata?: Record<string, unknown> }, options?: { idempotencyKey?: string }) =>
-      this.request('/v1/payment_intents', { method: 'POST', body: params, idempotencyKey: options?.idempotencyKey }),
+    create: (
+      params: { amount: number; currency?: string; merchant_reference?: string; description?: string; customer?: string; metadata?: Record<string, unknown> },
+      options?: { idempotencyKey?: string },
+    ) => {
+      if (params.customer && !options?.idempotencyKey) {
+        throw new Error('An idempotencyKey is required when creating a Payment Intent with a customer.');
+      }
+      return this.request('/v1/payment_intents', { method: 'POST', body: params, idempotencyKey: options?.idempotencyKey });
+    },
     list: () => this.request('/v1/payment_intents'),
     retrieve: (id: string) => this.request(`/v1/payment_intents/${encodeURIComponent(id)}`),
   };
