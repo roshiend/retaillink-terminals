@@ -35,6 +35,18 @@ describe('Retaillink SDK requests', () => {
     expect(init.body).toBe(JSON.stringify({ amount: 5000 }));
   });
 
+  it('sends Payment Intent cancellation to the encoded control endpoint', async () => {
+    fetchMock.mockResolvedValue({ ok: true, status: 200, json: async () => ({ id: 'pi/test', status: 'canceled' }) });
+    const client = new Retaillink({ apiKey: 'sk_test_example' });
+
+    await client.paymentIntents.cancel('pi/test');
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('http://localhost:3001/v1/payment_intents/pi%2Ftest/cancel');
+    expect(init.method).toBe('POST');
+    expect(init.body).toBe('{}');
+  });
+
   it('maps API errors to RetaillinkError', async () => {
     fetchMock.mockResolvedValue({
       ok: false,
