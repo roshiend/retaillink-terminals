@@ -10,6 +10,7 @@
     "dev:checkout": "pnpm --filter @retaillink/checkout dev",
     "db:generate": "pnpm --filter @retaillink/database prisma:generate",
     "db:migrate": "pnpm --filter @retaillink/database prisma:migrate",
+    "db:deploy": "pnpm --filter @retaillink/database prisma:deploy",
     "db:seed": "pnpm --filter @retaillink/database seed",
     "db:studio": "pnpm --filter @retaillink/database prisma:studio",
     "test": "vitest run",
