@@ -1,0 +1,115 @@
+openapi: 3.1.0
+info:
+  title: Retaillink Terminals Recurring Billing Sandbox API
+  version: 0.2.0
+  description: Sandbox recurring billing. Invoices use hosted checkout and do not store reusable real-card credentials.
+servers:
+  - url: http://localhost:3001
+components:
+  securitySchemes:
+    SecretKey:
+      type: http
+      scheme: bearer
+      bearerFormat: sk_test
+  schemas:
+    SubscriptionCreate:
+      type: object
+      required: [customer, amount, interval]
+      properties:
+        customer: { type: string }
+        amount: { type: integer, minimum: 1, description: Minor currency units }
+        currency: { type: string, default: LKR, minLength: 3, maxLength: 3 }
+        interval: { type: string, enum: [day, week, month, year] }
+        interval_count: { type: integer, minimum: 1, maximum: 36, default: 1 }
+        description: { type: string, maxLength: 500 }
+    SubscriptionCancel:
+      type: object
+      properties:
+        at_period_end: { type: boolean, default: true }
+security:
+  - SecretKey: []
+paths:
+  /v1/subscriptions:
+    get:
+      summary: List subscriptions
+      responses:
+        '200': { description: Subscription list }
+    post:
+      summary: Create subscription and first open invoice
+      description: The first invoice receives a hosted checkout Payment Intent. Active risk rules are evaluated before invoice generation.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SubscriptionCreate' }
+      responses:
+        '201': { description: Subscription created }
+        '403': { description: Blocked by an active sandbox risk rule }
+        '404': { description: Customer not found for merchant }
+  /v1/subscriptions/{id}:
+    get:
+      summary: Retrieve subscription
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Subscription }
+        '404': { description: Not found }
+  /v1/subscriptions/{id}/cancel:
+    post:
+      summary: Cancel subscription immediately or at period end
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SubscriptionCancel' }
+      responses:
+        '200': { description: Updated subscription }
+        '409': { description: Already canceled }
+  /v1/subscriptions/{id}/run_cycle:
+    post:
+      summary: Simulate the next billing cycle
+      description: Test-only scheduler action. Generates a new open invoice or finalises a period-end cancellation. Does not perform an off-session card charge.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Cycle generated or subscription canceled at period end }
+        '403': { description: Blocked by an active sandbox risk rule }
+        '409': { description: Inactive subscription or concurrent cycle conflict }
+  /v1/invoices:
+    get:
+      summary: List invoices
+      responses:
+        '200': { description: Invoice list }
+  /v1/invoices/{id}:
+    get:
+      summary: Retrieve invoice
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Invoice including hosted checkout URL when payable }
+        '404': { description: Not found }
+  /v1/invoices/{id}/void:
+    post:
+      summary: Void an unpaid invoice
+      description: Voiding also makes the related hosted checkout non-payable.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Invoice voided }
+        '409': { description: Invoice cannot be voided in its current state }
