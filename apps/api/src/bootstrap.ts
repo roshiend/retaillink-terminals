@@ -12,6 +12,7 @@ const [
   { registerBilling },
   { registerBillingRisk },
   { registerInvoicePaymentSync },
+  { registerPaymentIntentControl },
 ] = await Promise.all([
   import('./server.js'),
   import('./dashboard-routes.js'),
@@ -23,6 +24,7 @@ const [
   import('./billing.js'),
   import('./billing-risk.js'),
   import('./invoice-payment-sync.js'),
+  import('./payment-intent-control.js'),
 ]);
 
 if (originalNodeEnv === undefined) delete process.env.NODE_ENV;
@@ -37,6 +39,7 @@ registerInvoicePaymentSync(app);
 registerDashboardRoutes(app);
 registerMerchantSwitching(app);
 registerBilling(app);
+registerPaymentIntentControl(app);
 
 export { app };
 
