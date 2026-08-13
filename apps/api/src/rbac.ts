@@ -35,6 +35,10 @@ function allowedRoles(method: string, route: string): Role[] | null {
   if (route === '/v1/webhook_endpoints/:id' && method === 'DELETE') return ['OWNER', 'ADMIN', 'DEVELOPER'];
   if (route === '/v1/customers' && method === 'POST') return ['OWNER', 'ADMIN', 'DEVELOPER'];
   if (route === '/v1/customers/:id' && ['POST', 'DELETE'].includes(method)) return ['OWNER', 'ADMIN', 'DEVELOPER'];
+  if (route === '/v1/subscriptions' && method === 'POST') return ['OWNER', 'ADMIN', 'DEVELOPER'];
+  if (route === '/v1/subscriptions/:id/cancel' && method === 'POST') return ['OWNER', 'ADMIN', 'FINANCE'];
+  if (route === '/v1/subscriptions/:id/run_cycle' && method === 'POST') return ['OWNER', 'ADMIN', 'FINANCE'];
+  if (route === '/v1/invoices/:id/void' && method === 'POST') return ['OWNER', 'ADMIN', 'FINANCE'];
 
   if (route === '/dashboard/api_keys' && method === 'POST') return ['OWNER', 'ADMIN', 'DEVELOPER'];
   if (route === '/dashboard/api_keys/:id' && method === 'DELETE') return ['OWNER', 'ADMIN', 'DEVELOPER'];
