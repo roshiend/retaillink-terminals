@@ -53,15 +53,32 @@ enum SettlementStatus {
   FAILED
 }
 
+enum RiskRuleType {
+  AMOUNT_GTE
+  REFERENCE_CONTAINS
+}
+
+enum RiskAction {
+  BLOCK
+  REVIEW
+}
+
+enum RiskOutcome {
+  ALLOWED
+  REVIEW
+  BLOCKED
+}
+
 model User {
-  id           String           @id @default(cuid())
-  email        String           @unique
-  passwordHash String
-  memberships  MerchantUser[]
-  sessions     Session[]
-  auditLogs    AuditLog[]
-  createdAt    DateTime         @default(now())
-  updatedAt    DateTime         @updatedAt
+  id              String           @id @default(cuid())
+  email           String           @unique
+  passwordHash    String
+  memberships     MerchantUser[]
+  sessions        Session[]
+  auditLogs       AuditLog[]
+  teamInvitesSent TeamInvite[]     @relation("TeamInviteInviter")
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
 }
 
 model Merchant {
@@ -72,6 +89,7 @@ model Merchant {
   memberships      MerchantUser[]
   sessions         Session[]
   apiKeys          ApiKey[]
+  customers        Customer[]
   paymentIntents   PaymentIntent[]
   payments         Payment[]
   refunds          Refund[]
@@ -79,6 +97,10 @@ model Merchant {
   ledgerAccounts   LedgerAccount[]
   settlements      Settlement[]
   auditLogs        AuditLog[]
+  teamInvites      TeamInvite[]
+  apiRequestLogs   ApiRequestLog[]
+  riskRules        RiskRule[]
+  riskEvents       RiskEvent[]
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
 }
@@ -94,6 +116,23 @@ model MerchantUser {
 
   @@unique([userId, merchantId])
   @@index([merchantId])
+}
+
+model TeamInvite {
+  id              String    @id @default(cuid())
+  merchantId      String
+  invitedByUserId String?
+  email           String
+  role            String    @default("VIEWER")
+  tokenHash       String    @unique
+  expiresAt       DateTime
+  acceptedAt      DateTime?
+  merchant        Merchant  @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  invitedBy       User?     @relation("TeamInviteInviter", fields: [invitedByUserId], references: [id], onDelete: SetNull)
+  createdAt       DateTime  @default(now())
+
+  @@index([merchantId, createdAt])
+  @@index([email])
 }
 
 model Session {
@@ -127,9 +166,42 @@ model ApiKey {
   @@index([merchantId, environment])
 }
 
+model ApiRequestLog {
+  id         String   @id @default(cuid())
+  merchantId String
+  requestId  String
+  method     String
+  path       String
+  status     Int
+  source     String
+  durationMs Int
+  merchant   Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+
+  @@index([merchantId, createdAt])
+  @@index([requestId])
+}
+
+model Customer {
+  id         String          @id @default(cuid())
+  merchantId String
+  name       String?
+  email      String?
+  phone      String?
+  metadata   Json?
+  merchant   Merchant        @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  intents    PaymentIntent[]
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
+
+  @@unique([merchantId, email])
+  @@index([merchantId, createdAt])
+}
+
 model PaymentIntent {
   id                String              @id @default(cuid())
   merchantId        String
+  customerId        String?
   environment       Environment         @default(TEST)
   amount            BigInt
   currency          String              @default("LKR")
@@ -143,12 +215,15 @@ model PaymentIntent {
   actionCardBrand   String?
   actionCardLast4   String?
   merchant          Merchant            @relation(fields: [merchantId], references: [id], onDelete: Restrict)
+  customer          Customer?           @relation(fields: [customerId], references: [id], onDelete: SetNull)
   payments          Payment[]
+  riskEvents        RiskEvent[]
   createdAt         DateTime            @default(now())
   updatedAt         DateTime            @updatedAt
 
   @@unique([merchantId, idempotencyKey])
   @@index([merchantId, createdAt])
+  @@index([customerId])
 }
 
 model Payment {
@@ -265,6 +340,44 @@ model Settlement {
   updatedAt  DateTime         @updatedAt
 
   @@index([merchantId, createdAt])
+}
+
+model RiskRule {
+  id         String       @id @default(cuid())
+  merchantId String
+  name       String
+  type       RiskRuleType
+  action     RiskAction   @default(BLOCK)
+  threshold  BigInt?
+  textValue  String?
+  currency   String?
+  enabled    Boolean      @default(true)
+  merchant   Merchant     @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  events     RiskEvent[]
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+
+  @@index([merchantId, enabled])
+}
+
+model RiskEvent {
+  id                String         @id @default(cuid())
+  merchantId        String
+  ruleId            String?
+  paymentIntentId   String?
+  outcome           RiskOutcome
+  reason            String
+  amount            BigInt
+  currency          String
+  merchantReference String?
+  merchant          Merchant       @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  rule              RiskRule?      @relation(fields: [ruleId], references: [id], onDelete: SetNull)
+  paymentIntent     PaymentIntent? @relation(fields: [paymentIntentId], references: [id], onDelete: SetNull)
+  createdAt         DateTime       @default(now())
+
+  @@index([merchantId, createdAt])
+  @@index([ruleId])
+  @@index([paymentIntentId])
 }
 
 model AuditLog {
