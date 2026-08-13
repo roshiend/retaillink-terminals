@@ -1,112 +1,135 @@
 # Retaillink Terminals
 
-Sandbox-first payment gateway and merchant payment platform.
+Sandbox-first payment gateway and merchant payment platform for developing and testing Sri Lankan payment integrations.
 
-This repository currently implements a **demo/sandbox payment gateway only**. It does not process real money and must not be used with real card details.
+> **Sandbox only.** This repository does not process real money and must never be used with real card details or production payment credentials.
 
-## What is implemented
+## Current capabilities
 
-- Merchant/test API key model
-- One-time sandbox secret key generation
-- Payment Intent API
-- Idempotency keys
+### Payments
+
+- Payment Intent API with idempotency
 - Hosted checkout
 - Success, decline and simulated 3DS flows
-- Payment records
-- Refunds
-- Merchant payment dashboard
-- Signed webhooks
-- Webhook delivery records
-- Double-entry ledger entries for payments/refunds
-- Settlement data model foundation
-- PostgreSQL + Prisma
+- Payment history and detail
+- Full and partial refunds
+- Deterministic sandbox cards only
+- LKR minor-unit amounts
+
+### Merchant platform
+
+- Merchant signup/login using HttpOnly sessions
+- Multi-merchant memberships and account switching
+- Team invitations and roles: `OWNER`, `ADMIN`, `DEVELOPER`, `FINANCE`, `VIEWER`
+- Role-based access control on mutating merchant actions
+- Customers API and dashboard
+- Test secret API keys (`sk_test_...`) shown once and stored hashed
+- Audit log
+- API request metadata logs
+- Business settings
+
+### Risk
+
+- Amount-threshold rules
+- Merchant-reference text rules
+- `BLOCK` and `REVIEW` actions
+- BLOCK rules reject Payment Intent creation
+- REVIEW rules allow the sandbox payment while recording a risk event
+- Allowed/review/blocked decision history
+
+### Money movement simulation
+
+- Double-entry ledger
+- Simulated gateway fee: `2.5% + LKR 30.00`
+- Ledger-backed available balance
+- Refund ledger reversals
+- Demo settlements that reduce merchant payable balance
+
+### Developer platform
+
+- Signed HMAC webhooks
+- Webhook delivery history
+- SSRF protection for webhook destinations
+- First-party JavaScript/TypeScript SDK in `packages/sdk-js`
+- OpenAPI specification in `docs/openapi.yaml`
+- GitHub Actions CI for frozen install, Prisma, seed, tests, typecheck and builds
 
 ## Applications
 
-- `apps/api` — Fastify payment gateway API on port `3001`
-- `apps/dashboard` — merchant dashboard on port `3000`
-- `apps/checkout` — hosted checkout on port `3002`
-- `packages/database` — Prisma schema/database client
+- `apps/api` — Fastify payment API on `http://localhost:3001`
+- `apps/dashboard` — merchant dashboard on `http://localhost:3000`
+- `apps/checkout` — hosted checkout on `http://localhost:3002`
+- `packages/database` — Prisma schema and database client
 - `packages/payment-core` — deterministic sandbox processor
+- `packages/sdk-js` — JavaScript/TypeScript SDK
 
 ## Requirements
 
-- Node.js 20+
-- pnpm 10+
+- Node.js 22 recommended
+- pnpm 10
 - Docker Desktop / Docker Engine
+- PostgreSQL is provided through Docker Compose
 
-## Local setup
+For WSL development, use Linux Node/pnpm inside WSL rather than Windows Node binaries mounted into WSL.
 
-### 1. Install dependencies
+## First-time local setup
 
 ```bash
+git clone https://github.com/roshiend/retaillink-terminals.git
+cd retaillink-terminals
+
 pnpm install
-```
 
-### 2. Create local environment files
-
-macOS/Linux:
-
-```bash
 cp packages/database/.env.example packages/database/.env
 cp apps/api/.env.example apps/api/.env
 cp apps/dashboard/.env.example apps/dashboard/.env.local
 cp apps/checkout/.env.example apps/checkout/.env.local
-```
 
-Windows PowerShell:
-
-```powershell
-Copy-Item packages/database/.env.example packages/database/.env
-Copy-Item apps/api/.env.example apps/api/.env
-Copy-Item apps/dashboard/.env.example apps/dashboard/.env.local
-Copy-Item apps/checkout/.env.example apps/checkout/.env.local
-```
-
-### 3. Start PostgreSQL
-
-```bash
 docker compose up -d postgres
-```
 
-### 4. Generate Prisma client and create the database
-
-```bash
 pnpm db:generate
 pnpm db:migrate --name init
-```
-
-### 5. Seed the sandbox merchant
-
-```bash
 pnpm db:seed
-```
 
-The seed prints a secret key beginning with:
-
-```text
-sk_test_...
-```
-
-Copy it immediately. Only a SHA-256 hash is stored in the database, so the full key cannot be retrieved later.
-
-### 6. Start everything
-
-```bash
 pnpm dev
 ```
 
 Open:
 
-- Dashboard: `http://localhost:3000`
+- Merchant dashboard: `http://localhost:3000`
 - API health: `http://localhost:3001/health`
-- Checkout: opened from a Payment Intent checkout URL
+- Hosted checkout: opened from a Payment Intent `checkout_url`
 
-Enter the generated `sk_test_...` key in the dashboard.
+## Updating an existing local database
+
+After pulling a version that changes the Prisma schema:
+
+```bash
+git pull
+pnpm install
+pnpm db:generate
+pnpm db:migrate --name update
+pnpm dev
+```
+
+Use a descriptive migration name when possible.
+
+## Demo merchant
+
+The seed creates a sandbox merchant account and prints its sandbox secret API key when a new key is created.
+
+The seeded dashboard login is:
+
+```text
+Email: demo@retaillink.local
+Password: Retaillink123!
+```
+
+Change or remove seeded credentials before sharing a deployed demo publicly.
 
 ## Sandbox cards
 
-These numbers are recognised **only by the local demo processor**:
+These numbers are recognised only by the deterministic local sandbox processor:
 
 | Card | Result |
 | --- | --- |
@@ -116,9 +139,9 @@ These numbers are recognised **only by the local demo processor**:
 
 Use any future expiry date and any 3-digit CVC. Never enter a real card number.
 
-## Create a Payment Intent through the API
+## Create a Payment Intent
 
-Amounts are supplied in the smallest currency unit. For example `500000` represents `LKR 5,000.00`.
+Amounts are supplied in the smallest currency unit. For LKR, `500000` represents `LKR 5,000.00`.
 
 ```bash
 curl -X POST http://localhost:3001/v1/payment_intents \
@@ -129,11 +152,26 @@ curl -X POST http://localhost:3001/v1/payment_intents \
     "amount": 500000,
     "currency": "LKR",
     "merchant_reference": "ORDER-1001",
-    "description": "Demo order"
+    "description": "Sandbox order"
   }'
 ```
 
-The response includes a `checkout_url`. Open it in a browser and use a sandbox card.
+The response contains a `checkout_url`. Open it and use one of the sandbox card numbers above.
+
+## Customers
+
+```bash
+curl -X POST http://localhost:3001/v1/customers \
+  -H "Authorization: Bearer sk_test_REPLACE_ME" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Nimal Perera",
+    "email": "nimal@example.com",
+    "phone": "+94770000000"
+  }'
+```
+
+Customer records contain identity/metadata only. They do not store card numbers or CVCs.
 
 ## Webhooks
 
@@ -146,13 +184,13 @@ curl -X POST http://localhost:3001/v1/webhook_endpoints \
   -d '{"url":"https://example.test/retaillink-webhook"}'
 ```
 
-The returned `whsec_test_...` value is the endpoint signing secret. Webhook requests include:
+The returned `whsec_test_...` value is shown once and is used to verify:
 
 ```text
 x-retaillink-signature: t=<timestamp>,v1=<hmac_sha256>
 ```
 
-The signature input is:
+Signature input:
 
 ```text
 <timestamp>.<raw JSON request body>
@@ -163,32 +201,44 @@ Current events include:
 - `payment.succeeded`
 - `refund.succeeded`
 
-The current sandbox performs one immediate webhook attempt and records delivery success/failure. A production version should move retries to a durable queue.
+The sandbox currently performs immediate delivery attempts and records their result. Durable queue/retry infrastructure remains a production requirement.
 
-## Sandbox fee/ledger model
+## Dashboard modules
 
-Successful LKR payments currently simulate a gateway fee of:
+After signing in, the dashboard includes the main console plus additional modules:
 
-```text
-2.5% + LKR 30.00
-```
+- `/customers` — customer directory
+- `/team` — team members and invitations
+- `/risk` — risk rules and events
+- `/api-logs` — safe API request metadata
+- `/merchants` — merchant membership/account switching
+- `/invite?token=...` — team invitation acceptance
 
-Ledger posting uses balanced entries across processor clearing, merchant payable and fee revenue accounts. Refunds reverse the refundable payment amount between merchant payable and processor clearing.
+## Role model
+
+- **OWNER** — complete merchant control
+- **ADMIN** — broad operational/developer administration
+- **DEVELOPER** — payment creation, customers and integration management
+- **FINANCE** — financial read access and refunds
+- **VIEWER** — read-only access
+
+Owner-only actions such as team administration, business settings and running settlements remain restricted even from other roles.
 
 ## Important production boundary
 
-This codebase is intentionally a sandbox. Before any real-money use, the architecture needs at minimum:
+Before any real-money use, this architecture still requires at minimum:
 
 - acquiring bank/processor integration
-- Sri Lankan legal and regulatory approval/structure
+- appropriate Sri Lankan regulatory/legal authorisation and operating structure
 - PCI DSS scope determination and compliance work
-- secure card-data/tokenisation architecture
-- production identity/authentication and merchant onboarding/KYC
-- secrets management and key rotation
-- durable webhook/event queues and retries
-- fraud/risk controls
-- reconciliation and settlement operations
-- observability, alerting, backups and disaster recovery
+- hosted/tokenised card-data architecture designed with the real acquirer
+- merchant onboarding/KYC/KYB
+- production secrets management and key rotation
+- durable event/webhook queues and retries
+- stronger fraud/risk systems and operational review workflows
+- reconciliation against processor/acquirer files
+- real settlement/payout operations
+- monitoring, alerting, backup and disaster recovery
 - independent security review and penetration testing
 
-Do not convert the current test card endpoint into a real card-processing endpoint.
+Do not convert the sandbox card endpoint into a real card-processing endpoint.
