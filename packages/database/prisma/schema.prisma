@@ -69,6 +69,26 @@ enum RiskOutcome {
   BLOCKED
 }
 
+enum SubscriptionInterval {
+  DAY
+  WEEK
+  MONTH
+  YEAR
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  PAUSED
+  CANCELED
+}
+
+enum InvoiceStatus {
+  DRAFT
+  OPEN
+  PAID
+  VOID
+}
+
 model User {
   id              String           @id @default(cuid())
   email           String           @unique
@@ -93,6 +113,8 @@ model Merchant {
   paymentIntents   PaymentIntent[]
   payments         Payment[]
   refunds          Refund[]
+  subscriptions    Subscription[]
+  invoices         Invoice[]
   webhookEndpoints WebhookEndpoint[]
   ledgerAccounts   LedgerAccount[]
   settlements      Settlement[]
@@ -183,16 +205,18 @@ model ApiRequestLog {
 }
 
 model Customer {
-  id         String          @id @default(cuid())
-  merchantId String
-  name       String?
-  email      String?
-  phone      String?
-  metadata   Json?
-  merchant   Merchant        @relation(fields: [merchantId], references: [id], onDelete: Cascade)
-  intents    PaymentIntent[]
-  createdAt  DateTime        @default(now())
-  updatedAt  DateTime        @updatedAt
+  id            String          @id @default(cuid())
+  merchantId    String
+  name          String?
+  email         String?
+  phone         String?
+  metadata      Json?
+  merchant      Merchant        @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  intents       PaymentIntent[]
+  subscriptions Subscription[]
+  invoices      Invoice[]
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
 
   @@unique([merchantId, email])
   @@index([merchantId, createdAt])
@@ -216,6 +240,7 @@ model PaymentIntent {
   actionCardLast4   String?
   merchant          Merchant            @relation(fields: [merchantId], references: [id], onDelete: Restrict)
   customer          Customer?           @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  invoice           Invoice?
   payments          Payment[]
   riskEvents        RiskEvent[]
   createdAt         DateTime            @default(now())
@@ -265,6 +290,60 @@ model Refund {
 
   @@index([merchantId, createdAt])
   @@index([paymentId])
+}
+
+model Subscription {
+  id                  String               @id @default(cuid())
+  merchantId          String
+  customerId          String
+  amount              BigInt
+  currency            String               @default("LKR")
+  interval            SubscriptionInterval
+  intervalCount       Int                  @default(1)
+  description         String?
+  status              SubscriptionStatus   @default(ACTIVE)
+  currentPeriodStart  DateTime
+  currentPeriodEnd    DateTime
+  nextBillingAt       DateTime
+  cancelAtPeriodEnd   Boolean              @default(false)
+  canceledAt          DateTime?
+  merchant            Merchant             @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  customer            Customer             @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  invoices            Invoice[]
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+
+  @@index([merchantId, createdAt])
+  @@index([customerId])
+  @@index([merchantId, nextBillingAt])
+}
+
+model Invoice {
+  id              String        @id @default(cuid())
+  merchantId      String
+  customerId      String
+  subscriptionId  String?
+  paymentIntentId String?       @unique
+  amountDue       BigInt
+  amountPaid      BigInt        @default(0)
+  currency        String
+  status          InvoiceStatus @default(DRAFT)
+  description     String?
+  periodStart     DateTime
+  periodEnd       DateTime
+  dueAt           DateTime?
+  paidAt          DateTime?
+  merchant        Merchant      @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  customer        Customer      @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  subscription    Subscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+  paymentIntent   PaymentIntent? @relation(fields: [paymentIntentId], references: [id], onDelete: SetNull)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([merchantId, createdAt])
+  @@index([customerId])
+  @@index([subscriptionId])
+  @@index([merchantId, status])
 }
 
 model WebhookEndpoint {
