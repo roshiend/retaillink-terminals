@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Retaillink Terminals Sandbox API
-  version: 0.1.0
+  version: 0.2.0
   description: Sandbox-only payment gateway API. Never submit real card data.
 servers:
   - url: http://localhost:3001
@@ -26,6 +26,21 @@ components:
       properties:
         amount: { type: integer, minimum: 1 }
         reason: { type: string }
+    CustomerCreate:
+      type: object
+      properties:
+        name: { type: string }
+        email: { type: string, format: email }
+        phone: { type: string }
+        metadata: { type: object, additionalProperties: true }
+      description: At least one of name, email or phone is required.
+    CustomerUpdate:
+      type: object
+      properties:
+        name: { type: [string, 'null'] }
+        email: { type: [string, 'null'], format: email }
+        phone: { type: [string, 'null'] }
+        metadata: { type: [object, 'null'], additionalProperties: true }
     WebhookCreate:
       type: object
       required: [url]
@@ -106,6 +121,57 @@ paths:
       summary: List refunds
       responses:
         '200': { description: Refund list }
+  /v1/customers:
+    get:
+      summary: List customers
+      responses:
+        '200': { description: Customer list }
+    post:
+      summary: Create customer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CustomerCreate' }
+      responses:
+        '201': { description: Customer created }
+        '409': { description: Customer email already exists }
+  /v1/customers/{id}:
+    get:
+      summary: Retrieve customer
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Customer }
+        '404': { description: Not found }
+    post:
+      summary: Update customer
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CustomerUpdate' }
+      responses:
+        '200': { description: Customer updated }
+        '404': { description: Not found }
+    delete:
+      summary: Delete customer
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Customer deleted }
+        '404': { description: Not found }
   /v1/balance:
     get:
       summary: Retrieve merchant payable balance
