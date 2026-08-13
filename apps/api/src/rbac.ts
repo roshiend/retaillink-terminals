@@ -30,6 +30,7 @@ function allowedRoles(method: string, route: string): Role[] | null {
   if (['GET', 'HEAD', 'OPTIONS'].includes(method)) return null;
 
   if (route === '/v1/payment_intents' && method === 'POST') return ['OWNER', 'ADMIN', 'DEVELOPER'];
+  if (route === '/v1/payment_intents/:id/cancel' && method === 'POST') return ['OWNER', 'ADMIN', 'DEVELOPER'];
   if (route === '/v1/payments/:id/refunds' && method === 'POST') return ['OWNER', 'ADMIN', 'FINANCE'];
   if (route === '/v1/webhook_endpoints' && method === 'POST') return ['OWNER', 'ADMIN', 'DEVELOPER'];
   if (route === '/v1/webhook_endpoints/:id' && method === 'DELETE') return ['OWNER', 'ADMIN', 'DEVELOPER'];
@@ -48,6 +49,7 @@ function allowedRoles(method: string, route: string): Role[] | null {
   if (route === '/dashboard/team/members/:id' && method === 'DELETE') return ['OWNER'];
   if (route === '/dashboard/risk_rules' && method === 'POST') return ['OWNER', 'ADMIN'];
   if (route === '/dashboard/risk_rules/:id' && method === 'DELETE') return ['OWNER', 'ADMIN'];
+  if (route === '/dashboard/webhook_deliveries/:id/retry' && method === 'POST') return ['OWNER', 'ADMIN', 'DEVELOPER'];
 
   if (route.startsWith('/v1/') || route.startsWith('/dashboard/')) return ['OWNER', 'ADMIN'];
   return null;
