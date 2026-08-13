@@ -86,6 +86,43 @@ describe.sequential('merchant administration routes', () => {
     expect(removed.statusCode).toBe(200);
   });
 
+  it('enforces BLOCK rules and records REVIEW decisions on the canonical payment-intent route', async () => {
+    const blockRule = await app.inject({
+      method: 'POST', url: '/dashboard/risk_rules', headers: { cookie: ownerCookie },
+      payload: { name: 'Blocked reference marker', type: 'REFERENCE_CONTAINS', action: 'BLOCK', text_value: 'BLOCKME' },
+    });
+    expect(blockRule.statusCode).toBe(201);
+
+    const blocked = await app.inject({
+      method: 'POST', url: '/v1/payment_intents', headers: { cookie: ownerCookie, 'idempotency-key': `risk-block-${Date.now()}` },
+      payload: { amount: 25_000, currency: 'LKR', merchant_reference: 'ORDER-BLOCKME-1001' },
+    });
+    expect(blocked.statusCode).toBe(403);
+    expect(blocked.json().error.type).toBe('risk_blocked');
+
+    const blockedEvents = await app.inject({ method: 'GET', url: '/dashboard/risk_events', headers: { cookie: ownerCookie } });
+    expect(blockedEvents.json().data.some((row: { outcome: string; rule_name: string | null }) => row.outcome === 'blocked' && row.rule_name === 'Blocked reference marker')).toBe(true);
+
+    await app.inject({ method: 'DELETE', url: `/dashboard/risk_rules/${blockRule.json().id}`, headers: { cookie: ownerCookie } });
+
+    const reviewRule = await app.inject({
+      method: 'POST', url: '/dashboard/risk_rules', headers: { cookie: ownerCookie },
+      payload: { name: 'Review medium payments', type: 'AMOUNT_GTE', action: 'REVIEW', threshold: 20_000, currency: 'LKR' },
+    });
+    expect(reviewRule.statusCode).toBe(201);
+
+    const reviewed = await app.inject({
+      method: 'POST', url: '/v1/payment_intents', headers: { cookie: ownerCookie, 'idempotency-key': `risk-review-${Date.now()}` },
+      payload: { amount: 30_000, currency: 'LKR', merchant_reference: 'ORDER-REVIEW-1002' },
+    });
+    expect(reviewed.statusCode).toBe(201);
+
+    const reviewEvents = await app.inject({ method: 'GET', url: '/dashboard/risk_events', headers: { cookie: ownerCookie } });
+    expect(reviewEvents.json().data.some((row: { outcome: string; rule_name: string | null; merchant_reference: string | null }) => row.outcome === 'review' && row.rule_name === 'Review medium payments' && row.merchant_reference === 'ORDER-REVIEW-1002')).toBe(true);
+
+    await app.inject({ method: 'DELETE', url: `/dashboard/risk_rules/${reviewRule.json().id}`, headers: { cookie: ownerCookie } });
+  });
+
   it('settles the full positive ledger balance and reduces available balance to zero', async () => {
     const intent = await app.inject({
       method: 'POST', url: '/v1/payment_intents', headers: { cookie: ownerCookie, 'idempotency-key': `settlement-${Date.now()}` },
