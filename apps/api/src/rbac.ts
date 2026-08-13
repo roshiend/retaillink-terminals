@@ -1,0 +1,72 @@
+import { createHash } from 'node:crypto';
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import { prisma } from '@retaillink/database';
+
+type Role = 'OWNER' | 'ADMIN' | 'DEVELOPER' | 'FINANCE' | 'VIEWER';
+
+function hashToken(value: string) {
+  return createHash('sha256').update(value).digest('hex');
+}
+
+async function sessionRole(request: FastifyRequest) {
+  const authorization = request.headers.authorization;
+  if (typeof authorization === 'string' && authorization.startsWith('Bearer sk_test_')) return null;
+
+  const token = request.cookies.rt_session;
+  if (!token) return null;
+  const session = await prisma.session.findUnique({
+    where: { tokenHash: hashToken(token) },
+    select: { userId: true, merchantId: true, expiresAt: true },
+  });
+  if (!session || session.expiresAt <= new Date()) return null;
+  const membership = await prisma.merchantUser.findUnique({
+    where: { userId_merchantId: { userId: session.userId, merchantId: session.merchantId } },
+    select: { role: true },
+  });
+  return membership?.role as Role | undefined;
+}
+
+function allowedRoles(method: string, route: string): Role[] | null {
+  if (['GET', 'HEAD', 'OPTIONS'].includes(method)) return null;
+
+  if (route === '/v1/payment_intents' && method === 'POST') return ['OWNER', 'ADMIN', 'DEVELOPER'];
+  if (route === '/v1/payments/:id/refunds' && method === 'POST') return ['OWNER', 'ADMIN', 'FINANCE'];
+  if (route === '/v1/webhook_endpoints' && method === 'POST') return ['OWNER', 'ADMIN', 'DEVELOPER'];
+  if (route === '/v1/webhook_endpoints/:id' && method === 'DELETE') return ['OWNER', 'ADMIN', 'DEVELOPER'];
+  if (route === '/v1/customers' && method === 'POST') return ['OWNER', 'ADMIN', 'DEVELOPER'];
+  if (route === '/v1/customers/:id' && ['POST', 'DELETE'].includes(method)) return ['OWNER', 'ADMIN', 'DEVELOPER'];
+
+  if (route === '/dashboard/api_keys' && method === 'POST') return ['OWNER', 'ADMIN', 'DEVELOPER'];
+  if (route === '/dashboard/api_keys/:id' && method === 'DELETE') return ['OWNER', 'ADMIN', 'DEVELOPER'];
+  if (route === '/dashboard/settings' && method === 'POST') return ['OWNER'];
+  if (route === '/dashboard/settlements' && method === 'POST') return ['OWNER'];
+  if (route === '/dashboard/team/invites' && method === 'POST') return ['OWNER'];
+  if (route === '/dashboard/team/members/:id' && method === 'DELETE') return ['OWNER'];
+  if (route === '/dashboard/risk_rules' && method === 'POST') return ['OWNER', 'ADMIN'];
+  if (route === '/dashboard/risk_rules/:id' && method === 'DELETE') return ['OWNER', 'ADMIN'];
+
+  if (route.startsWith('/v1/') || route.startsWith('/dashboard/')) return ['OWNER', 'ADMIN'];
+  return null;
+}
+
+function deny(reply: FastifyReply, role: string, route: string) {
+  return reply.code(403).send({
+    error: {
+      type: 'permission_error',
+      code: 'insufficient_role',
+      message: `${role} access is not permitted to perform this action on ${route}.`,
+    },
+  });
+}
+
+export function registerRbac(app: FastifyInstance) {
+  app.addHook('preHandler', async (request, reply) => {
+    const route = request.routeOptions.url ?? request.url.split('?', 1)[0];
+    const required = allowedRoles(request.method, route);
+    if (!required) return;
+
+    const role = await sessionRole(request);
+    if (!role) return;
+    if (!required.includes(role)) return deny(reply, role, route);
+  });
+}
