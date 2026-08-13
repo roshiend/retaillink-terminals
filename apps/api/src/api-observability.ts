@@ -38,12 +38,14 @@ export function registerApiObservability(app: FastifyInstance) {
     if (publicApiPath(request)) started.set(request, Date.now());
   });
 
-  app.addHook('onResponse', async (request, reply) => {
+  // Persist before Fastify completes the response so a merchant can immediately
+  // query API Logs after an API call and deterministically see that request.
+  app.addHook('onSend', async (request, reply, payload) => {
     const path = publicApiPath(request);
-    if (!path || path.startsWith('/v1/customers')) return;
+    if (!path || path.startsWith('/v1/customers')) return payload;
 
     const auth = await resolveMerchant(request);
-    if (!auth) return;
+    if (!auth) return payload;
 
     await prisma.apiRequestLog.create({
       data: {
@@ -56,5 +58,7 @@ export function registerApiObservability(app: FastifyInstance) {
         durationMs: Math.max(0, Date.now() - (started.get(request) ?? Date.now())),
       },
     }).catch((error) => request.log.warn({ err: error }, 'Unable to persist API request log'));
+
+    return payload;
   });
 }
