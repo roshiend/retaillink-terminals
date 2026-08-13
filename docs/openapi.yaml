@@ -18,6 +18,7 @@ components:
       properties:
         amount: { type: integer, minimum: 1, description: Amount in minor currency units }
         currency: { type: string, default: LKR, minLength: 3, maxLength: 3 }
+        customer: { type: string, description: Sandbox customer ID. Requires Idempotency-Key when supplied. }
         merchant_reference: { type: string }
         description: { type: string }
         metadata: { type: object, additionalProperties: true }
@@ -62,6 +63,7 @@ paths:
         '200': { description: Payment intent list }
     post:
       summary: Create payment intent
+      description: If `customer` is supplied, the Idempotency-Key header is required and retries must use the same customer.
       parameters:
         - in: header
           name: Idempotency-Key
@@ -73,8 +75,10 @@ paths:
             schema: { $ref: '#/components/schemas/PaymentIntentCreate' }
       responses:
         '201': { description: Payment intent created }
-        '400': { description: Invalid request }
+        '400': { description: Invalid request or missing required idempotency key }
         '401': { description: Invalid API key }
+        '403': { description: Blocked by an active sandbox risk rule }
+        '409': { description: Idempotency conflict }
   /v1/payment_intents/{id}:
     get:
       summary: Retrieve payment intent
