@@ -1,7 +1,18 @@
 const originalNodeEnv = process.env.NODE_ENV;
 process.env.NODE_ENV = 'test';
 
-const [{ app }, { registerDashboardRoutes }, { registerRiskEnforcement }, { registerApiObservability }, { registerRbac }, { registerMerchantSwitching }, { registerPaymentCustomerAssociation }] = await Promise.all([
+const [
+  { app },
+  { registerDashboardRoutes },
+  { registerRiskEnforcement },
+  { registerApiObservability },
+  { registerRbac },
+  { registerMerchantSwitching },
+  { registerPaymentCustomerAssociation },
+  { registerBilling },
+  { registerBillingRisk },
+  { registerInvoicePaymentSync },
+] = await Promise.all([
   import('./server.js'),
   import('./dashboard-routes.js'),
   import('./risk-enforcement.js'),
@@ -9,6 +20,9 @@ const [{ app }, { registerDashboardRoutes }, { registerRiskEnforcement }, { regi
   import('./rbac.js'),
   import('./merchant-switching.js'),
   import('./payment-customer.js'),
+  import('./billing.js'),
+  import('./billing-risk.js'),
+  import('./invoice-payment-sync.js'),
 ]);
 
 if (originalNodeEnv === undefined) delete process.env.NODE_ENV;
@@ -18,8 +32,11 @@ registerRbac(app);
 registerApiObservability(app);
 registerPaymentCustomerAssociation(app);
 registerRiskEnforcement(app);
+registerBillingRisk(app);
+registerInvoicePaymentSync(app);
 registerDashboardRoutes(app);
 registerMerchantSwitching(app);
+registerBilling(app);
 
 export { app };
 
