@@ -132,7 +132,7 @@ async function apiLog(request: FastifyRequest, merchantId: string, source: strin
       merchantId,
       requestId: request.id,
       method: request.method,
-      path: request.routeOptions.url,
+      path: request.routeOptions.url ?? request.url,
       status,
       source,
       durationMs: Math.max(0, Date.now() - startedAt),
@@ -318,18 +318,18 @@ export function registerDashboardRoutes(app: FastifyInstance) {
     if (!parsed.success) return reply.code(400).send({ error: { type: 'invalid_request_error', message: 'Invalid invitation acceptance.', details: parsed.error.flatten() } });
     const invite = await prisma.teamInvite.findUnique({ where: { tokenHash: hashToken(parsed.data.token) }, include: { merchant: true } });
     if (!invite || invite.acceptedAt || invite.expiresAt <= new Date()) return reply.code(404).send({ error: { type: 'not_found', message: 'This invitation is invalid or has expired.' } });
-    let user = await prisma.user.findUnique({ where: { email: invite.email } });
-    if (user && !verifyPassword(parsed.data.password, user.passwordHash)) return reply.code(401).send({ error: { type: 'authentication_error', message: 'The password for this existing account is incorrect.' } });
+    const existingUser = await prisma.user.findUnique({ where: { email: invite.email } });
+    if (existingUser && !verifyPassword(parsed.data.password, existingUser.passwordHash)) return reply.code(401).send({ error: { type: 'authentication_error', message: 'The password for this existing account is incorrect.' } });
     const result = await prisma.$transaction(async (tx) => {
-      if (!user) user = await tx.user.create({ data: { email: invite.email, passwordHash: hashPassword(parsed.data.password) } });
-      const membership = await tx.merchantUser.upsert({ where: { userId_merchantId: { userId: user.id, merchantId: invite.merchantId } }, update: { role: invite.role }, create: { userId: user.id, merchantId: invite.merchantId, role: invite.role } });
+      const acceptedUser = existingUser ?? await tx.user.create({ data: { email: invite.email, passwordHash: hashPassword(parsed.data.password) } });
+      const membership = await tx.merchantUser.upsert({ where: { userId_merchantId: { userId: acceptedUser.id, merchantId: invite.merchantId } }, update: { role: invite.role }, create: { userId: acceptedUser.id, merchantId: invite.merchantId, role: invite.role } });
       await tx.teamInvite.update({ where: { id: invite.id }, data: { acceptedAt: new Date() } });
-      return membership;
+      return { membership, user: acceptedUser };
     });
-    const token = await createSession(user.id, invite.merchantId);
+    const token = await createSession(result.user.id, invite.merchantId);
     setSessionCookie(reply, token);
-    await audit({ merchantId: invite.merchantId, userId: user.id, action: 'team_invite.accepted', resource: 'merchant_user', resourceId: result.id, ipAddress: request.ip });
-    return { user: { id: user.id, email: user.email }, merchant: { id: invite.merchant.id, name: invite.merchant.name, country: invite.merchant.country, currency: invite.merchant.defaultCurrency }, role: result.role };
+    await audit({ merchantId: invite.merchantId, userId: result.user.id, action: 'team_invite.accepted', resource: 'merchant_user', resourceId: result.membership.id, ipAddress: request.ip });
+    return { user: { id: result.user.id, email: result.user.email }, merchant: { id: invite.merchant.id, name: invite.merchant.name, country: invite.merchant.country, currency: invite.merchant.defaultCurrency }, role: result.membership.role };
   });
 
   app.get('/dashboard/risk_rules', async (request, reply) => {
