@@ -9,6 +9,18 @@ const paymentIntentBody = z.object({
   merchant_reference: z.string().max(255).optional(),
 }).passthrough();
 
+export type RiskEvaluationInput = {
+  amount: number | bigint;
+  currency: string;
+  merchant_reference?: string;
+};
+
+export type RiskEvaluation = {
+  outcome: 'allowed' | 'review' | 'blocked';
+  ruleId: string | null;
+  ruleName: string | null;
+};
+
 function hashToken(value: string) {
   return createHash('sha256').update(value).digest('hex');
 }
@@ -29,12 +41,13 @@ async function merchantIdFor(request: FastifyRequest) {
 
 function matchesRule(
   rule: { type: string; threshold: bigint | null; textValue: string | null; currency: string | null },
-  input: { amount: number; currency: string; merchant_reference?: string },
+  input: RiskEvaluationInput,
 ) {
   const currency = input.currency.toUpperCase();
+  const amount = typeof input.amount === 'bigint' ? input.amount : BigInt(input.amount);
   if (rule.type === 'AMOUNT_GTE') {
     if (rule.currency && rule.currency !== currency) return false;
-    return rule.threshold !== null && BigInt(input.amount) >= rule.threshold;
+    return rule.threshold !== null && amount >= rule.threshold;
   }
   if (rule.type === 'REFERENCE_CONTAINS') {
     return Boolean(rule.textValue && input.merchant_reference?.toLowerCase().includes(rule.textValue.toLowerCase()));
@@ -47,7 +60,7 @@ async function recordEvent(input: {
   ruleId: string | null;
   outcome: 'ALLOWED' | 'REVIEW' | 'BLOCKED';
   reason: string;
-  amount: number;
+  amount: number | bigint;
   currency: string;
   merchantReference?: string;
 }) {
@@ -57,11 +70,57 @@ async function recordEvent(input: {
       ruleId: input.ruleId ?? undefined,
       outcome: input.outcome,
       reason: input.reason,
-      amount: BigInt(input.amount),
+      amount: typeof input.amount === 'bigint' ? input.amount : BigInt(input.amount),
       currency: input.currency.toUpperCase(),
       merchantReference: input.merchantReference,
     },
   });
+}
+
+export async function evaluateRisk(merchantId: string, input: RiskEvaluationInput): Promise<RiskEvaluation> {
+  const rules = await prisma.riskRule.findMany({
+    where: { merchantId, enabled: true },
+    orderBy: { createdAt: 'asc' },
+  });
+  const matched = rules.filter((rule) => matchesRule(rule, input));
+  const blockRule = matched.find((rule) => rule.action === 'BLOCK');
+  if (blockRule) {
+    await recordEvent({
+      merchantId,
+      ruleId: blockRule.id,
+      outcome: 'BLOCKED',
+      reason: `Matched BLOCK rule “${blockRule.name}”.`,
+      amount: input.amount,
+      currency: input.currency,
+      merchantReference: input.merchant_reference,
+    });
+    return { outcome: 'blocked', ruleId: blockRule.id, ruleName: blockRule.name };
+  }
+
+  const reviewRule = matched.find((rule) => rule.action === 'REVIEW');
+  if (reviewRule) {
+    await recordEvent({
+      merchantId,
+      ruleId: reviewRule.id,
+      outcome: 'REVIEW',
+      reason: `Matched REVIEW rule “${reviewRule.name}”; payment was allowed in sandbox review mode.`,
+      amount: input.amount,
+      currency: input.currency,
+      merchantReference: input.merchant_reference,
+    });
+    return { outcome: 'review', ruleId: reviewRule.id, ruleName: reviewRule.name };
+  }
+
+  await recordEvent({
+    merchantId,
+    ruleId: null,
+    outcome: 'ALLOWED',
+    reason: rules.length ? 'No enabled risk rule matched.' : 'No enabled risk rules configured.',
+    amount: input.amount,
+    currency: input.currency,
+    merchantReference: input.merchant_reference,
+  });
+  return { outcome: 'allowed', ruleId: null, ruleName: null };
 }
 
 function blocked(reply: FastifyReply, ruleName: string) {
@@ -93,47 +152,7 @@ export function registerRiskEnforcement(app: FastifyInstance) {
       if (existing) return;
     }
 
-    const rules = await prisma.riskRule.findMany({
-      where: { merchantId, enabled: true },
-      orderBy: { createdAt: 'asc' },
-    });
-    const matched = rules.filter((rule) => matchesRule(rule, parsed.data));
-    const blockRule = matched.find((rule) => rule.action === 'BLOCK');
-    if (blockRule) {
-      await recordEvent({
-        merchantId,
-        ruleId: blockRule.id,
-        outcome: 'BLOCKED',
-        reason: `Matched BLOCK rule “${blockRule.name}”.`,
-        amount: parsed.data.amount,
-        currency: parsed.data.currency,
-        merchantReference: parsed.data.merchant_reference,
-      });
-      return blocked(reply, blockRule.name);
-    }
-
-    const reviewRule = matched.find((rule) => rule.action === 'REVIEW');
-    if (reviewRule) {
-      await recordEvent({
-        merchantId,
-        ruleId: reviewRule.id,
-        outcome: 'REVIEW',
-        reason: `Matched REVIEW rule “${reviewRule.name}”; payment was allowed in sandbox review mode.`,
-        amount: parsed.data.amount,
-        currency: parsed.data.currency,
-        merchantReference: parsed.data.merchant_reference,
-      });
-      return;
-    }
-
-    await recordEvent({
-      merchantId,
-      ruleId: null,
-      outcome: 'ALLOWED',
-      reason: rules.length ? 'No enabled risk rule matched.' : 'No enabled risk rules configured.',
-      amount: parsed.data.amount,
-      currency: parsed.data.currency,
-      merchantReference: parsed.data.merchant_reference,
-    });
+    const decision = await evaluateRisk(merchantId, parsed.data);
+    if (decision.outcome === 'blocked') return blocked(reply, decision.ruleName ?? 'unnamed rule');
   });
 }
