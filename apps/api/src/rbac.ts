@@ -41,6 +41,7 @@ function allowedRoles(method: string, route: string): Role[] | null {
   if (route === '/v1/subscriptions' && method === 'POST') return ['OWNER', 'ADMIN', 'DEVELOPER'];
   if (route === '/v1/subscriptions/:id/cancel' && method === 'POST') return ['OWNER', 'ADMIN', 'FINANCE'];
   if (route === '/v1/subscriptions/:id/run_cycle' && method === 'POST') return ['OWNER', 'ADMIN', 'FINANCE'];
+  if (route === '/v1/subscriptions/:id/resume' && method === 'POST') return ['OWNER', 'ADMIN', 'FINANCE'];
   if (route === '/v1/invoices/:id/void' && method === 'POST') return ['OWNER', 'ADMIN', 'FINANCE'];
 
   if (route === '/dashboard/api_keys' && method === 'POST') return ['OWNER', 'ADMIN', 'DEVELOPER'];
