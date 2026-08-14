@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Retaillink Terminals Sandbox API
-  version: 0.2.0
+  version: 0.3.0
   description: Sandbox-only payment gateway API. Never submit real card data.
 servers:
   - url: http://localhost:3001
@@ -22,6 +22,15 @@ components:
         merchant_reference: { type: string }
         description: { type: string }
         metadata: { type: object, additionalProperties: true }
+    PaymentLinkCreate:
+      type: object
+      required: [title, amount]
+      properties:
+        title: { type: string, maxLength: 120 }
+        description: { type: string, maxLength: 500 }
+        amount: { type: integer, minimum: 1, description: Fixed amount in minor currency units }
+        currency: { type: string, default: LKR, minLength: 3, maxLength: 3 }
+        merchant_reference_prefix: { type: string, maxLength: 80 }
     RefundCreate:
       type: object
       properties:
@@ -104,6 +113,89 @@ paths:
         '401': { description: Invalid API key }
         '404': { description: Payment Intent not found }
         '409': { description: Payment Intent cannot be canceled in its current state }
+  /v1/payment_links:
+    get:
+      summary: List Payment Links
+      responses:
+        '200': { description: Payment Link list }
+    post:
+      summary: Create a reusable fixed-amount Payment Link
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PaymentLinkCreate' }
+      responses:
+        '201': { description: Payment Link created }
+        '400': { description: Invalid request }
+        '401': { description: Invalid API key }
+  /v1/payment_links/{id}:
+    get:
+      summary: Retrieve Payment Link
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Payment Link }
+        '404': { description: Not found }
+  /v1/payment_links/{id}/state:
+    post:
+      summary: Enable or disable a Payment Link
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [active]
+              properties:
+                active: { type: boolean }
+      responses:
+        '200': { description: Payment Link state updated }
+        '404': { description: Not found }
+  /public/payment_links/{token}:
+    get:
+      security: []
+      summary: Retrieve the public Payment Link landing details
+      description: Read-only. This endpoint never creates a Payment Intent.
+      parameters:
+        - in: path
+          name: token
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Public Payment Link details }
+        '404': { description: Link unavailable or disabled }
+  /public/payment_links/{token}/checkout:
+    post:
+      security: []
+      summary: Start checkout from a Payment Link
+      description: Creates a fresh Payment Intent for a customer action. Replaying the same Idempotency-Key returns the same Payment Intent.
+      parameters:
+        - in: path
+          name: token
+          required: true
+          schema: { type: string }
+        - in: header
+          name: Idempotency-Key
+          required: true
+          schema: { type: string, maxLength: 120 }
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        '201': { description: Checkout Payment Intent created }
+        '200': { description: Existing idempotent checkout returned }
+        '403': { description: Blocked by an active sandbox risk rule }
+        '404': { description: Link unavailable or disabled }
   /v1/payments:
     get:
       summary: List payments
