@@ -31,6 +31,8 @@ function allowedRoles(method: string, route: string): Role[] | null {
 
   if (route === '/v1/payment_intents' && method === 'POST') return ['OWNER', 'ADMIN', 'DEVELOPER'];
   if (route === '/v1/payment_intents/:id/cancel' && method === 'POST') return ['OWNER', 'ADMIN', 'DEVELOPER'];
+  if (route === '/v1/payment_links' && method === 'POST') return ['OWNER', 'ADMIN', 'DEVELOPER'];
+  if (route === '/v1/payment_links/:id/state' && method === 'POST') return ['OWNER', 'ADMIN', 'DEVELOPER'];
   if (route === '/v1/payments/:id/refunds' && method === 'POST') return ['OWNER', 'ADMIN', 'FINANCE'];
   if (route === '/v1/webhook_endpoints' && method === 'POST') return ['OWNER', 'ADMIN', 'DEVELOPER'];
   if (route === '/v1/webhook_endpoints/:id' && method === 'DELETE') return ['OWNER', 'ADMIN', 'DEVELOPER'];
