@@ -50,14 +50,14 @@ describe.sequential('durable webhook worker', () => {
     const id = await createDueDelivery('https://8.8.8.8/retaillink-worker-test');
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('', { status: 200 }));
 
-    const processed = await runWebhookBatch();
-    expect(processed).toBeGreaterThanOrEqual(1);
+    const processed = await runWebhookBatch({ merchantId });
+    expect(processed).toBe(1);
     const row = await prisma.webhookDelivery.findUniqueOrThrow({ where: { id } });
     expect(row.status).toBe('DELIVERED');
     expect(row.attempts).toBe(2);
     expect(row.lastError).toBeNull();
-    expect(fetchMock).toHaveBeenCalled();
-    const [, options] = fetchMock.mock.calls.find(([target]) => String(target).includes('8.8.8.8'))!;
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [, options] = fetchMock.mock.calls[0];
     expect((options?.headers as Record<string, string>)['x-retaillink-signature']).toMatch(/^t=\d+,v1=[a-f0-9]{64}$/);
   });
 
@@ -66,7 +66,8 @@ describe.sequential('durable webhook worker', () => {
     const id = await createDueDelivery('http://127.0.0.1:9999/webhook');
     const fetchMock = vi.spyOn(globalThis, 'fetch');
 
-    await runWebhookBatch();
+    const processed = await runWebhookBatch({ merchantId });
+    expect(processed).toBe(1);
     const row = await prisma.webhookDelivery.findUniqueOrThrow({ where: { id } });
     expect(row.status).toBe('FAILED');
     expect(row.attempts).toBe(2);
