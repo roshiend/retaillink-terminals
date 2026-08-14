@@ -23,6 +23,24 @@ services:
       - "127.0.0.1:3001:3001"
     stop_grace_period: 30s
 
+  worker:
+    build:
+      context: ../..
+      dockerfile: infrastructure/docker/Dockerfile.worker
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: ${DATABASE_URL}
+      WEBHOOK_SECRET_ENCRYPTION_KEY: ${WEBHOOK_SECRET_ENCRYPTION_KEY}
+      WEBHOOK_WORKER_POLL_MS: ${WEBHOOK_WORKER_POLL_MS:-5000}
+      WEBHOOK_WORKER_BATCH_SIZE: ${WEBHOOK_WORKER_BATCH_SIZE:-20}
+      WEBHOOK_MAX_ATTEMPTS: ${WEBHOOK_MAX_ATTEMPTS:-6}
+      WEBHOOK_RETRY_BASE_MS: ${WEBHOOK_RETRY_BASE_MS:-30000}
+      WEBHOOK_RETRY_MAX_MS: ${WEBHOOK_RETRY_MAX_MS:-1800000}
+      WEBHOOK_CLAIM_TTL_MS: ${WEBHOOK_CLAIM_TTL_MS:-60000}
+      WEBHOOK_TIMEOUT_MS: ${WEBHOOK_TIMEOUT_MS:-5000}
+    stop_grace_period: 30s
+
   dashboard:
     build:
       context: ../..
@@ -50,7 +68,9 @@ services:
       - "127.0.0.1:3002:3002"
 
 # Production expectations:
-# - Put all three services behind an HTTPS ingress/load balancer.
+# - Put API, dashboard and checkout behind an HTTPS ingress/load balancer.
+# - The worker has no public listener and must remain on the private application network.
 # - Use a managed PostgreSQL service; do not run the production database here.
 # - Store DATABASE_URL, WEBHOOK_SECRET_ENCRYPTION_KEY and future processor/KMS credentials in a secrets manager.
 # - Restrict the bound localhost ports so only the ingress can reach them.
+# - Keep an edge/WAF rate limit in front of the API; the application limiter is defense-in-depth, not a distributed global limiter.
