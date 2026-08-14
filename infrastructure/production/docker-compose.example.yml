@@ -10,6 +10,7 @@ services:
       DATABASE_URL: ${DATABASE_URL}
       CHECKOUT_BASE_URL: ${CHECKOUT_BASE_URL}
       DASHBOARD_ORIGIN: ${DASHBOARD_ORIGIN}
+      WEBHOOK_SECRET_ENCRYPTION_KEY: ${WEBHOOK_SECRET_ENCRYPTION_KEY}
       REQUIRE_IDEMPOTENCY_KEYS: "true"
       ENABLE_RATE_LIMIT: "true"
       TRUST_PROXY: "true"
@@ -51,5 +52,5 @@ services:
 # Production expectations:
 # - Put all three services behind an HTTPS ingress/load balancer.
 # - Use a managed PostgreSQL service; do not run the production database here.
-# - Store DATABASE_URL and all future processor/KMS credentials in a secrets manager.
+# - Store DATABASE_URL, WEBHOOK_SECRET_ENCRYPTION_KEY and future processor/KMS credentials in a secrets manager.
 # - Restrict the bound localhost ports so only the ingress can reach them.
