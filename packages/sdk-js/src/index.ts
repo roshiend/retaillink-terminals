@@ -60,8 +60,15 @@ export class Retaillink {
   payments = {
     list: () => this.request('/v1/payments'),
     retrieve: (id: string) => this.request(`/v1/payments/${encodeURIComponent(id)}`),
-    refund: (id: string, params: { amount?: number; reason?: string } = {}) =>
-      this.request(`/v1/payments/${encodeURIComponent(id)}/refunds`, { method: 'POST', body: params }),
+    refund: (
+      id: string,
+      params: { amount?: number; reason?: string } = {},
+      options?: { idempotencyKey?: string },
+    ) => this.request(`/v1/payments/${encodeURIComponent(id)}/refunds`, {
+      method: 'POST',
+      body: params,
+      idempotencyKey: options?.idempotencyKey,
+    }),
   };
 
   refunds = {
