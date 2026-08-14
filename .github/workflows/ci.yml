@@ -48,6 +48,8 @@ jobs:
       - run: pnpm build
       - name: Build API production image
         run: docker build -f infrastructure/docker/Dockerfile.api -t retaillink-api:ci .
+      - name: Build worker production image
+        run: docker build -f infrastructure/docker/Dockerfile.worker -t retaillink-worker:ci .
       - name: Build dashboard production image
         run: docker build --build-arg NEXT_PUBLIC_API_URL=https://api.sandbox.example -f infrastructure/docker/Dockerfile.dashboard -t retaillink-dashboard:ci .
       - name: Build checkout production image
