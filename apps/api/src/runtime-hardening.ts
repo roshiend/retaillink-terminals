@@ -42,6 +42,17 @@ export function validateRuntimeConfig() {
     problems.push('REQUIRE_IDEMPOTENCY_KEYS=true is required in production');
   }
 
+  const encryptionKey = process.env.WEBHOOK_SECRET_ENCRYPTION_KEY;
+  if (!encryptionKey) {
+    problems.push('WEBHOOK_SECRET_ENCRYPTION_KEY is required in production');
+  } else {
+    try {
+      if (Buffer.from(encryptionKey, 'base64').length !== 32) problems.push('WEBHOOK_SECRET_ENCRYPTION_KEY must decode to 32 bytes');
+    } catch {
+      problems.push('WEBHOOK_SECRET_ENCRYPTION_KEY must be valid base64');
+    }
+  }
+
   if (problems.length) throw new Error(`Invalid production configuration: ${problems.join('; ')}`);
 }
 
