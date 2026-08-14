@@ -31,11 +31,14 @@ jobs:
       DASHBOARD_ORIGIN: http://localhost:3000
 
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - name: Checkout source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Set up pnpm
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
         with:
           version: 10.15.0
-      - uses: actions/setup-node@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: 22
       - run: pnpm install --frozen-lockfile
@@ -46,11 +49,61 @@ jobs:
       - run: pnpm test
       - run: pnpm typecheck
       - run: pnpm build
+
+      - name: Scan repository dependencies and configuration
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
+        with:
+          scan-type: fs
+          scan-ref: .
+          format: table
+          exit-code: '1'
+          ignore-unfixed: true
+          severity: CRITICAL,HIGH
+
       - name: Build API production image
         run: docker build -f infrastructure/docker/Dockerfile.api -t retaillink-api:ci .
+      - name: Scan API production image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
+        with:
+          image-ref: retaillink-api:ci
+          format: table
+          exit-code: '1'
+          ignore-unfixed: true
+          vuln-type: os,library
+          severity: CRITICAL,HIGH
+
       - name: Build worker production image
         run: docker build -f infrastructure/docker/Dockerfile.worker -t retaillink-worker:ci .
+      - name: Scan worker production image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
+        with:
+          image-ref: retaillink-worker:ci
+          format: table
+          exit-code: '1'
+          ignore-unfixed: true
+          vuln-type: os,library
+          severity: CRITICAL,HIGH
+
       - name: Build dashboard production image
         run: docker build --build-arg NEXT_PUBLIC_API_URL=https://api.sandbox.example -f infrastructure/docker/Dockerfile.dashboard -t retaillink-dashboard:ci .
+      - name: Scan dashboard production image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
+        with:
+          image-ref: retaillink-dashboard:ci
+          format: table
+          exit-code: '1'
+          ignore-unfixed: true
+          vuln-type: os,library
+          severity: CRITICAL,HIGH
+
       - name: Build checkout production image
         run: docker build --build-arg NEXT_PUBLIC_API_URL=https://api.sandbox.example -f infrastructure/docker/Dockerfile.checkout -t retaillink-checkout:ci .
+      - name: Scan checkout production image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
+        with:
+          image-ref: retaillink-checkout:ci
+          format: table
+          exit-code: '1'
+          ignore-unfixed: true
+          vuln-type: os,library
+          severity: CRITICAL,HIGH
