@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import { prisma } from '@retaillink/database';
+import { runBillingBatch } from './billing-worker.js';
 import { runWebhookBatch } from './webhook-worker.js';
 
 function numberEnv(name: string, fallback: number, minimum = 1) {
@@ -35,13 +36,18 @@ process.once('SIGINT', () => { void shutdown('SIGINT'); });
 
 async function main() {
   validateWorkerConfig();
-  const pollMs = numberEnv('WEBHOOK_WORKER_POLL_MS', 5000, 250);
+  const pollMs = numberEnv('WORKER_POLL_MS', numberEnv('WEBHOOK_WORKER_POLL_MS', 5000, 250), 250);
   console.info(JSON.stringify({ level: 'info', message: 'Retaillink worker started', poll_ms: pollMs }));
 
   while (!stopping) {
     try {
-      const processed = await runWebhookBatch();
-      if (!processed) await sleep(pollMs);
+      const [webhooks, billing] = await Promise.all([runWebhookBatch(), runBillingBatch()]);
+      const processed = webhooks + billing;
+      if (processed) {
+        console.info(JSON.stringify({ level: 'info', message: 'Worker batch completed', webhook_jobs: webhooks, billing_jobs: billing }));
+      } else {
+        await sleep(pollMs);
+      }
     } catch (error) {
       console.error(JSON.stringify({
         level: 'error',
