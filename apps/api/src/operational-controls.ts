@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import { registerBillingControls } from './billing-controls.js';
 import { registerPersistentIdempotency } from './idempotency.js';
 import { registerPaymentIntentControl } from './payment-intent-control.js';
 import { registerRefundConcurrency } from './refund-concurrency.js';
@@ -11,6 +12,7 @@ export function registerOperationalControls(app: FastifyInstance) {
   registerSandboxCardGuard(app);
   registerPaymentIntentControl(app);
   registerRefundConcurrency(app);
+  registerBillingControls(app);
   registerWebhookControls(app);
   registerWebhookRetry(app);
 }
