@@ -1,0 +1,19 @@
+FROM node:22-alpine
+
+RUN corepack enable && corepack prepare pnpm@10.15.0 --activate
+WORKDIR /app
+
+ARG NEXT_PUBLIC_API_URL
+ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
+
+COPY . .
+RUN pnpm install --frozen-lockfile && pnpm --filter @retaillink/checkout build && chown -R node:node /app
+
+ENV NODE_ENV=production
+USER node
+EXPOSE 3002
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+  CMD wget -q -O - http://127.0.0.1:3002/ >/dev/null || exit 1
+
+CMD ["pnpm", "--filter", "@retaillink/checkout", "start"]
