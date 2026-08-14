@@ -52,6 +52,8 @@ function allowedRoles(method: string, route: string): Role[] | null {
   if (route === '/dashboard/risk_rules' && method === 'POST') return ['OWNER', 'ADMIN'];
   if (route === '/dashboard/risk_rules/:id' && method === 'DELETE') return ['OWNER', 'ADMIN'];
   if (route === '/dashboard/webhook_deliveries/:id/retry' && method === 'POST') return ['OWNER', 'ADMIN', 'DEVELOPER'];
+  if (route === '/dashboard/webhook_endpoints/:id/state' && method === 'POST') return ['OWNER', 'ADMIN', 'DEVELOPER'];
+  if (route === '/dashboard/webhook_endpoints/:id/rotate_secret' && method === 'POST') return ['OWNER', 'ADMIN', 'DEVELOPER'];
 
   if (route.startsWith('/v1/') || route.startsWith('/dashboard/')) return ['OWNER', 'ADMIN'];
   return null;
