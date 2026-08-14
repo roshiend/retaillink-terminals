@@ -30,10 +30,14 @@ export default function ConsoleLauncher() {
 
   const links = [
     ['/', 'Overview'],
+    ['/payment-links', 'Payment Links'],
+    ['/billing', 'Billing'],
     ['/customers', 'Customers'],
-    ['/team', 'Team'],
+    ['/analytics', 'Analytics'],
+    ['/webhook-deliveries', 'Webhooks'],
     ['/risk', 'Risk'],
     ['/api-logs', 'API Logs'],
+    ['/team', 'Team'],
     ['/merchants', 'Merchants'],
   ];
 
