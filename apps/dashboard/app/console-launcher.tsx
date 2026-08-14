@@ -30,6 +30,7 @@ export default function ConsoleLauncher() {
 
   const links = [
     ['/', 'Overview'],
+    ['/payment-intents', 'Payment Intents'],
     ['/payment-links', 'Payment Links'],
     ['/billing', 'Billing'],
     ['/customers', 'Customers'],
