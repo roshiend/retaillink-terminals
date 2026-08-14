@@ -41,6 +41,7 @@ export default function ConsoleLauncher() {
     ['/api-logs', 'API Logs'],
     ['/team', 'Team'],
     ['/merchants', 'Merchants'],
+    ['/security', 'Security'],
   ];
 
   return <nav className="consoleLauncher" aria-label="Console modules">
