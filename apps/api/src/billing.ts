@@ -261,7 +261,11 @@ export function registerBilling(app: FastifyInstance) {
         if (!subscription) return { kind: 'missing' as const };
         if (subscription.status !== 'ACTIVE') return { kind: 'inactive' as const };
         if (subscription.cancelAtPeriodEnd) {
-          const canceled = await tx.subscription.update({ where: { id }, data: { status: 'CANCELED', canceledAt: new Date(), cancelAtPeriodEnd: false } });
+          const canceled = await tx.subscription.update({
+            where: { id },
+            data: { status: 'CANCELED', canceledAt: new Date(), cancelAtPeriodEnd: false },
+            include: { invoices: { include: { paymentIntent: true }, orderBy: { createdAt: 'desc' }, take: 1 } },
+          });
           return { kind: 'canceled' as const, subscription: canceled };
         }
 
