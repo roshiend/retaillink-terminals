@@ -109,7 +109,7 @@ export default function BillingPage() {
   }
 
   async function runCycle(id: string) {
-    if (!window.confirm('Generate the next sandbox billing cycle now? This simulates the scheduler.')) return;
+    if (!window.confirm('Generate the next sandbox billing cycle now? This is the manual equivalent of the production scheduler.')) return;
     setBusy(true); setMessage('');
     try {
       const result = await request(`/v1/subscriptions/${id}/run_cycle`, { method: 'POST', body: '{}' });
@@ -117,6 +117,18 @@ export default function BillingPage() {
       setMessage(result.result === 'invoice_generated' ? 'Next sandbox invoice generated.' : 'Subscription canceled at the end of its period.');
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Could not run billing cycle.');
+    } finally { setBusy(false); }
+  }
+
+  async function resume(id: string) {
+    if (!window.confirm('Resume this paused subscription? The scheduler will re-evaluate risk before generating a due invoice.')) return;
+    setBusy(true); setMessage('');
+    try {
+      await request(`/v1/subscriptions/${id}/resume`, { method: 'POST', body: '{}' });
+      await load();
+      setMessage('Subscription resumed. If the blocking risk rule still matches, the scheduler will pause it again.');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not resume subscription.');
     } finally { setBusy(false); }
   }
 
@@ -150,7 +162,7 @@ export default function BillingPage() {
 
   return <main className="moduleShell"><section className="modulePage">
     <header className="moduleHeader"><div><p className="eyebrow">Recurring payments</p><h1>Billing</h1><p className="muted">Subscriptions create invoices and hosted checkout links. This sandbox never silently reuses or stores a real card.</p></div><div className="moduleHeaderActions"><a className="secondary" href="/">Back to overview</a><button disabled={busy} onClick={() => void load()}>Refresh</button></div></header>
-    <p className="moduleNotice"><strong>Sandbox scheduler:</strong> use “Run next cycle” to simulate the next billing date. Each new invoice still requires the customer to complete hosted checkout.</p>
+    <p className="moduleNotice"><strong>Scheduling:</strong> the production worker automatically advances subscriptions when <span className="mono">next_billing_at</span> is due. “Run next cycle” remains available for immediate sandbox testing. BLOCK risk rules pause automatic billing until the subscription is resumed.</p>
     {message && <p className="moduleNotice">{message}</p>}
 
     <section className="moduleCard"><p className="eyebrow">New recurring schedule</p><h2>Create subscription</h2>
@@ -165,7 +177,7 @@ export default function BillingPage() {
 
     <section className="moduleCard"><div className="panelTitle"><div><p className="eyebrow">Recurring schedules</p><h2>{subscriptions.length} subscriptions</h2></div></div><div className="tableWrap"><table><thead><tr><th>Customer</th><th>Plan</th><th>Status</th><th>Next billing</th><th>Latest invoice</th><th></th></tr></thead><tbody>{subscriptions.map((row) => {
       const customer = customerById.get(row.customer);
-      return <tr key={row.id}><td><strong>{customer?.name || customer?.email || row.customer}</strong><small className="mono">{row.id}</small></td><td>{money(row.amount,row.currency)}<small>every {row.interval_count > 1 ? `${row.interval_count} ` : ''}{row.interval}{row.interval_count > 1 ? 's' : ''}</small></td><td><span className={`status ${row.status}`}>{row.status}</span>{row.cancel_at_period_end && <small>Cancels at period end</small>}</td><td>{new Date(row.next_billing_at).toLocaleString()}</td><td>{row.latest_invoice ? <><span className={`status ${row.latest_invoice.status}`}>{row.latest_invoice.status}</span>{row.latest_invoice.checkout_url && row.latest_invoice.status === 'open' && <small><a href={row.latest_invoice.checkout_url} target="_blank" rel="noreferrer">Open checkout</a></small>}</> : '—'}</td><td className="billingActions">{row.status === 'active' && !row.cancel_at_period_end && <><button className="linkButton" disabled={busy} onClick={() => void runCycle(row.id)}>Run next cycle</button><button className="linkButton" disabled={busy} onClick={() => void cancel(row.id,true)}>Cancel at period end</button><button className="linkButton danger" disabled={busy} onClick={() => void cancel(row.id,false)}>Cancel now</button></>}</td></tr>;
+      return <tr key={row.id}><td><strong>{customer?.name || customer?.email || row.customer}</strong><small className="mono">{row.id}</small></td><td>{money(row.amount,row.currency)}<small>every {row.interval_count > 1 ? `${row.interval_count} ` : ''}{row.interval}{row.interval_count > 1 ? 's' : ''}</small></td><td><span className={`status ${row.status}`}>{row.status}</span>{row.cancel_at_period_end && <small>Cancels at period end</small>}{row.status === 'paused' && <small>Review Risk events before resuming</small>}</td><td>{new Date(row.next_billing_at).toLocaleString()}</td><td>{row.latest_invoice ? <><span className={`status ${row.latest_invoice.status}`}>{row.latest_invoice.status}</span>{row.latest_invoice.checkout_url && row.latest_invoice.status === 'open' && <small><a href={row.latest_invoice.checkout_url} target="_blank" rel="noreferrer">Open checkout</a></small>}</> : '—'}</td><td className="billingActions">{row.status === 'active' && !row.cancel_at_period_end && <><button className="linkButton" disabled={busy} onClick={() => void runCycle(row.id)}>Run next cycle</button><button className="linkButton" disabled={busy} onClick={() => void cancel(row.id,true)}>Cancel at period end</button><button className="linkButton danger" disabled={busy} onClick={() => void cancel(row.id,false)}>Cancel now</button></>}{row.status === 'paused' && <button className="linkButton" disabled={busy} onClick={() => void resume(row.id)}>Resume</button>}</td></tr>;
     })}</tbody></table>{!subscriptions.length && <p className="empty">No subscriptions yet.</p>}</div></section>
 
     <section className="moduleCard"><p className="eyebrow">Billing documents</p><h2>{invoices.length} invoices</h2><div className="tableWrap"><table><thead><tr><th>Invoice</th><th>Customer</th><th>Amount</th><th>Status</th><th>Period</th><th></th></tr></thead><tbody>{invoices.map((row) => {
