@@ -32,6 +32,7 @@ export default function ConsoleLauncher() {
     ['/', 'Overview'],
     ['/payment-intents', 'Payment Intents'],
     ['/payment-links', 'Payment Links'],
+    ['/finance', 'Finance'],
     ['/billing', 'Billing'],
     ['/customers', 'Customers'],
     ['/analytics', 'Analytics'],
