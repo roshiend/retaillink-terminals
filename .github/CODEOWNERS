@@ -1,0 +1,19 @@
+# Default repository owner
+* @roshiend
+
+# Payment and accounting state
+/apps/api/ @roshiend
+/packages/payment-core/ @roshiend
+/packages/database/ @roshiend
+/packages/database/prisma/migrations/ @roshiend
+
+# Checkout and merchant console
+/apps/checkout/ @roshiend
+/apps/dashboard/ @roshiend
+
+# Deployment and CI
+/.github/ @roshiend
+/infrastructure/ @roshiend
+/docs/production-readiness.md @roshiend
+/docs/deployment.md @roshiend
+/SECURITY.md @roshiend
