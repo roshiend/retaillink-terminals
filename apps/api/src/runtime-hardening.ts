@@ -109,6 +109,25 @@ export function registerRuntimeHardening(app: FastifyInstance) {
     }
   });
 
+  app.addHook('preHandler', async (request, reply) => {
+    if (process.env.NODE_ENV !== 'production') return;
+    if (request.method !== 'POST' || request.routeOptions.url !== '/v1/webhook_endpoints') return;
+    const rawUrl = (request.body as { url?: unknown } | null)?.url;
+    if (typeof rawUrl !== 'string') return;
+    try {
+      if (new URL(rawUrl).protocol === 'https:') return;
+    } catch {
+      return;
+    }
+    return reply.code(400).send({
+      error: {
+        type: 'invalid_request_error',
+        code: 'https_webhook_required',
+        message: 'Production webhook endpoints must use HTTPS.',
+      },
+    });
+  });
+
   app.addHook('onSend', async (request, reply, payload) => {
     reply.header('X-Content-Type-Options', 'nosniff');
     reply.header('X-Frame-Options', 'DENY');
