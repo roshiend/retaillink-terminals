@@ -5,6 +5,7 @@ const [
   { app },
   { prisma },
   { registerDashboardRoutes },
+  { registerFinanceRoutes },
   { registerRiskEnforcement },
   { registerApiObservability },
   { registerRbac },
@@ -20,6 +21,7 @@ const [
   import('./server.js'),
   import('@retaillink/database'),
   import('./dashboard-routes.js'),
+  import('./finance-routes.js'),
   import('./risk-enforcement.js'),
   import('./api-observability.js'),
   import('./rbac.js'),
@@ -44,6 +46,7 @@ registerRiskEnforcement(app);
 registerBillingRisk(app);
 registerInvoicePaymentSync(app);
 registerDashboardRoutes(app);
+registerFinanceRoutes(app);
 registerMerchantSwitching(app);
 registerBilling(app);
 registerOperationalControls(app);
