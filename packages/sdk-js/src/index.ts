@@ -48,6 +48,15 @@ export class Retaillink {
     cancel: (id: string) => this.request(`/v1/payment_intents/${encodeURIComponent(id)}/cancel`, { method: 'POST', body: {} }),
   };
 
+  paymentLinks = {
+    create: (params: { title: string; amount: number; currency?: string; description?: string; merchant_reference_prefix?: string }) =>
+      this.request('/v1/payment_links', { method: 'POST', body: params }),
+    list: () => this.request('/v1/payment_links'),
+    retrieve: (id: string) => this.request(`/v1/payment_links/${encodeURIComponent(id)}`),
+    setActive: (id: string, active: boolean) =>
+      this.request(`/v1/payment_links/${encodeURIComponent(id)}/state`, { method: 'POST', body: { active } }),
+  };
+
   payments = {
     list: () => this.request('/v1/payments'),
     retrieve: (id: string) => this.request(`/v1/payments/${encodeURIComponent(id)}`),
