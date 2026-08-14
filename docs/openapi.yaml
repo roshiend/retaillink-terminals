@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Retaillink Terminals Sandbox API
-  version: 0.3.0
+  version: 0.4.0
   description: Sandbox-only payment gateway API. Never submit real card data.
 servers:
   - url: http://localhost:3001
@@ -62,9 +62,18 @@ paths:
   /health:
     get:
       security: []
-      summary: API health check
+      summary: API liveness check
+      description: Confirms the API process is alive. It does not test PostgreSQL.
       responses:
-        '200': { description: Healthy }
+        '200': { description: Process is healthy }
+  /ready:
+    get:
+      security: []
+      summary: API readiness check
+      description: Verifies PostgreSQL connectivity. Load balancers should remove an instance when this returns 503.
+      responses:
+        '200': { description: API and database are ready }
+        '503': { description: Database is unavailable }
   /v1/payment_intents:
     get:
       summary: List payment intents
@@ -215,17 +224,25 @@ paths:
   /v1/payments/{id}/refunds:
     post:
       summary: Refund payment
+      description: In production an Idempotency-Key is required. Replaying the same key with the same request returns the original refund response. Reusing it for a different request returns 409.
       parameters:
         - in: path
           name: id
           required: true
           schema: { type: string }
+        - in: header
+          name: Idempotency-Key
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 255 }
       requestBody:
         content:
           application/json:
             schema: { $ref: '#/components/schemas/RefundCreate' }
       responses:
-        '201': { description: Refund created }
+        '201': { description: Refund created or original idempotent refund replayed }
+        '400': { description: Invalid refund or missing/invalid Idempotency-Key }
+        '404': { description: Payment not found }
+        '409': { description: Idempotency conflict, request in progress, or payment no longer refundable }
   /v1/refunds:
     get:
       summary: List refunds
@@ -299,13 +316,15 @@ paths:
         '200': { description: Webhook endpoint list }
     post:
       summary: Create webhook endpoint
+      description: Production deployments require an HTTPS destination. Private, loopback and reserved destinations are rejected.
       requestBody:
         required: true
         content:
           application/json:
             schema: { $ref: '#/components/schemas/WebhookCreate' }
       responses:
-        '201': { description: Endpoint created }
+        '201': { description: Endpoint created; signing secret is shown once }
+        '400': { description: Unsafe/invalid endpoint }
   /v1/webhook_endpoints/{id}:
     delete:
       summary: Delete webhook endpoint
