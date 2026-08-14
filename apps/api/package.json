@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/bootstrap.ts",
+    "dev:worker": "tsx watch src/worker.ts",
     "start": "tsx src/bootstrap.ts",
+    "worker": "tsx src/worker.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
