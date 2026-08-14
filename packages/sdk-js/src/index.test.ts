@@ -35,6 +35,20 @@ describe('Retaillink SDK requests', () => {
     expect(init.body).toBe(JSON.stringify({ amount: 5000 }));
   });
 
+  it('sends refund idempotency keys to the encoded payment endpoint', async () => {
+    fetchMock.mockResolvedValue({ ok: true, status: 201, json: async () => ({ id: 're_test' }) });
+    const client = new Retaillink({ apiKey: 'sk_test_example' });
+
+    await client.payments.refund('pay/test', { amount: 2500, reason: 'requested_by_customer' }, { idempotencyKey: 'refund-order-1' });
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const headers = new Headers(init.headers);
+    expect(url).toBe('http://localhost:3001/v1/payments/pay%2Ftest/refunds');
+    expect(init.method).toBe('POST');
+    expect(headers.get('idempotency-key')).toBe('refund-order-1');
+    expect(init.body).toBe(JSON.stringify({ amount: 2500, reason: 'requested_by_customer' }));
+  });
+
   it('sends Payment Intent cancellation to the encoded control endpoint', async () => {
     fetchMock.mockResolvedValue({ ok: true, status: 200, json: async () => ({ id: 'pi/test', status: 'canceled' }) });
     const client = new Retaillink({ apiKey: 'sk_test_example' });
