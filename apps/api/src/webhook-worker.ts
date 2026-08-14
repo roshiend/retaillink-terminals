@@ -81,7 +81,7 @@ function deliveryIsDue(row: { attempts: number; updatedAt: Date; lastError: stri
   return row.updatedAt.getTime() + retryDelayMs(row.attempts) <= now;
 }
 
-export async function runWebhookBatch() {
+export async function runWebhookBatch(options: { merchantId?: string } = {}) {
   const maxAttempts = numberEnv('WEBHOOK_MAX_ATTEMPTS', 6);
   const batchSize = numberEnv('WEBHOOK_WORKER_BATCH_SIZE', 20);
   const now = Date.now();
@@ -89,7 +89,10 @@ export async function runWebhookBatch() {
     where: {
       status: { in: ['PENDING', 'FAILED'] },
       attempts: { lt: maxAttempts },
-      endpoint: { enabled: true },
+      endpoint: {
+        enabled: true,
+        ...(options.merchantId ? { merchantId: options.merchantId } : {}),
+      },
     },
     include: { endpoint: true },
     orderBy: { updatedAt: 'asc' },
