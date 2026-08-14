@@ -33,10 +33,16 @@ export function decryptWebhookSecret(value: string) {
   return Buffer.concat([decipher.update(Buffer.from(ciphertextRaw, 'base64')), decipher.final()]).toString('utf8');
 }
 
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  if (!value || typeof value !== 'object') return false;
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+}
+
 function encryptSecretFields(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(encryptSecretFields);
-  if (!value || typeof value !== 'object') return value;
-  return Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([key, entry]) => [
+  if (!isPlainObject(value)) return value;
+  return Object.fromEntries(Object.entries(value).map(([key, entry]) => [
     key,
     key === 'secret' && typeof entry === 'string' ? encryptWebhookSecret(entry) : encryptSecretFields(entry),
   ]));
@@ -44,8 +50,8 @@ function encryptSecretFields(value: unknown): unknown {
 
 function decryptSecretFields(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(decryptSecretFields);
-  if (!value || typeof value !== 'object') return value;
-  return Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([key, entry]) => [
+  if (!isPlainObject(value)) return value;
+  return Object.fromEntries(Object.entries(value).map(([key, entry]) => [
     key,
     key === 'secret' && typeof entry === 'string' ? decryptWebhookSecret(entry) : decryptSecretFields(entry),
   ]));
