@@ -102,30 +102,31 @@ model User {
 }
 
 model Merchant {
-  id               String            @id @default(cuid())
-  name             String
-  country          String            @default("LK")
-  defaultCurrency  String            @default("LKR")
-  memberships      MerchantUser[]
-  sessions         Session[]
-  apiKeys          ApiKey[]
-  customers        Customer[]
-  paymentLinks     PaymentLink[]
-  paymentIntents   PaymentIntent[]
-  payments         Payment[]
-  refunds          Refund[]
-  subscriptions    Subscription[]
-  invoices         Invoice[]
-  webhookEndpoints WebhookEndpoint[]
-  ledgerAccounts   LedgerAccount[]
-  settlements      Settlement[]
-  auditLogs        AuditLog[]
-  teamInvites      TeamInvite[]
-  apiRequestLogs   ApiRequestLog[]
-  riskRules        RiskRule[]
-  riskEvents       RiskEvent[]
-  createdAt        DateTime          @default(now())
-  updatedAt        DateTime          @updatedAt
+  id                 String              @id @default(cuid())
+  name               String
+  country            String              @default("LK")
+  defaultCurrency    String              @default("LKR")
+  memberships        MerchantUser[]
+  sessions           Session[]
+  apiKeys            ApiKey[]
+  customers          Customer[]
+  paymentLinks       PaymentLink[]
+  paymentIntents     PaymentIntent[]
+  payments           Payment[]
+  refunds            Refund[]
+  subscriptions      Subscription[]
+  invoices           Invoice[]
+  webhookEndpoints   WebhookEndpoint[]
+  ledgerAccounts     LedgerAccount[]
+  settlements        Settlement[]
+  auditLogs          AuditLog[]
+  teamInvites        TeamInvite[]
+  apiRequestLogs     ApiRequestLog[]
+  idempotencyRecords IdempotencyRecord[]
+  riskRules          RiskRule[]
+  riskEvents         RiskEvent[]
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
 }
 
 model MerchantUser {
@@ -203,6 +204,26 @@ model ApiRequestLog {
 
   @@index([merchantId, createdAt])
   @@index([requestId])
+}
+
+model IdempotencyRecord {
+  id             String   @id @default(cuid())
+  merchantId     String
+  key            String
+  method         String
+  path           String
+  requestHash    String
+  lockToken      String?
+  lockedUntil    DateTime?
+  responseStatus Int?
+  responseBody   Json?
+  merchant       Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([merchantId, key])
+  @@index([merchantId, createdAt])
+  @@index([lockedUntil])
 }
 
 model Customer {
