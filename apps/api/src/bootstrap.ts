@@ -3,6 +3,7 @@ process.env.NODE_ENV = 'test';
 
 const [
   { app },
+  { prisma },
   { registerDashboardRoutes },
   { registerRiskEnforcement },
   { registerApiObservability },
@@ -14,8 +15,10 @@ const [
   { registerInvoicePaymentSync },
   { registerOperationalControls },
   { registerPaymentLinks },
+  { registerRuntimeHardening, validateRuntimeConfig },
 ] = await Promise.all([
   import('./server.js'),
+  import('@retaillink/database'),
   import('./dashboard-routes.js'),
   import('./risk-enforcement.js'),
   import('./api-observability.js'),
@@ -27,11 +30,13 @@ const [
   import('./invoice-payment-sync.js'),
   import('./operational-controls.js'),
   import('./payment-links.js'),
+  import('./runtime-hardening.js'),
 ]);
 
 if (originalNodeEnv === undefined) delete process.env.NODE_ENV;
 else process.env.NODE_ENV = originalNodeEnv;
 
+registerRuntimeHardening(app);
 registerRbac(app);
 registerApiObservability(app);
 registerPaymentCustomerAssociation(app);
@@ -47,9 +52,31 @@ registerPaymentLinks(app);
 export { app };
 
 if (process.env.NODE_ENV !== 'test') {
-  const port = Number(process.env.PORT ?? 3001);
-  app.listen({ port, host: '0.0.0.0' }).catch((error) => {
+  let shuttingDown = false;
+  const shutdown = async (signal: string) => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    app.log.info({ signal }, 'Graceful shutdown started');
+    try {
+      await app.close();
+      await prisma.$disconnect();
+      process.exitCode = 0;
+    } catch (error) {
+      app.log.error(error, 'Graceful shutdown failed');
+      process.exitCode = 1;
+    }
+  };
+
+  process.once('SIGTERM', () => { void shutdown('SIGTERM'); });
+  process.once('SIGINT', () => { void shutdown('SIGINT'); });
+
+  try {
+    validateRuntimeConfig();
+    const port = Number(process.env.PORT ?? 3001);
+    await app.listen({ port, host: '0.0.0.0' });
+  } catch (error) {
     app.log.error(error);
-    process.exit(1);
-  });
+    await prisma.$disconnect().catch(() => undefined);
+    process.exitCode = 1;
+  }
 }
