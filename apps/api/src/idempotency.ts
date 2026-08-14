@@ -132,24 +132,25 @@ export function registerPersistentIdempotency(app: FastifyInstance) {
       });
     }
 
+    const existingId = existing.id;
     const claimed = await prisma.idempotencyRecord.updateMany({
       where: {
-        id: existing.id,
+        id: existingId,
         responseStatus: null,
         OR: [{ lockedUntil: null }, { lockedUntil: { lte: new Date() } }],
       },
       data: { lockToken, lockedUntil },
     });
     if (claimed.count !== 1) {
-      existing = await prisma.idempotencyRecord.findUnique({ where: { id: existing.id } });
-      if (existing?.responseStatus !== null && existing?.responseBody !== null) {
+      existing = await prisma.idempotencyRecord.findUnique({ where: { id: existingId } });
+      if (existing && existing.responseStatus !== null && existing.responseBody !== null) {
         return reply.code(existing.responseStatus).send(existing.responseBody);
       }
       return reply.code(409).send({
         error: { type: 'idempotency_error', code: 'idempotency_request_in_progress', message: 'A request with this Idempotency-Key is already in progress. Retry shortly.' },
       });
     }
-    pending.set(request, { id: existing.id, lockToken });
+    pending.set(request, { id: existingId, lockToken });
   });
 
   app.addHook('onSend', async (request, reply, payload) => {
