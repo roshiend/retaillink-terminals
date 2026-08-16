@@ -219,8 +219,7 @@ public class MainActivity extends Activity {
 
             JSONObject confirm = new JSONObject();
             confirm.put("card_number", card);
-            confirm.put("expiry_month", 12);
-            confirm.put("expiry_year", 2035);
+            confirm.put("expiry", "12/35");
             confirm.put("cvc", "123");
             HttpResult result = call("POST", base + "/checkout/" + token + "/confirm", null, null, confirm);
 
