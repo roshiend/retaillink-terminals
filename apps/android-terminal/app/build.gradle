@@ -34,6 +34,12 @@ android {
         }
     }
 
+    // This APK is a direct-sideload compatibility build for a privately owned
+    // Android 10 terminal, not a Google Play distribution artifact.
+    lint {
+        disable 'ExpiredTargetSdkVersion'
+    }
+
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
