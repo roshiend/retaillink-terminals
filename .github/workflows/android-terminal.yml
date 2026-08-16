@@ -36,17 +36,17 @@ jobs:
           yes | "$SDKMANAGER" --licenses >/dev/null || true
           "$SDKMANAGER" 'platforms;android-36' 'build-tools;36.0.0'
 
-      - name: Build F20 sandbox debug APK
+      - name: Build F20 Android 10 compatibility APK
         working-directory: apps/android-terminal
-        run: gradle --no-daemon :app:assembleDebug
+        run: gradle --no-daemon :app:assembleRelease
 
       - name: Print APK SHA-256
-        run: sha256sum apps/android-terminal/app/build/outputs/apk/debug/app-debug.apk
+        run: sha256sum apps/android-terminal/app/build/outputs/apk/release/app-release.apk
 
       - name: Upload installable APK
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: retaillink-f20-sandbox-terminal
-          path: apps/android-terminal/app/build/outputs/apk/debug/app-debug.apk
+          name: retaillink-f20-android10-compat
+          path: apps/android-terminal/app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
           retention-days: 14
