@@ -1,0 +1,48 @@
+name: Android Terminal APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/android-terminal/**'
+      - '.github/workflows/android-terminal.yml'
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+
+      - name: Set up Java 17
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle 9.5
+        uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb
+        with:
+          gradle-version: '9.5.0'
+
+      - name: Install Android API 37
+        run: sdkmanager 'platforms;android-37' 'build-tools;36.0.0'
+
+      - name: Build F20 sandbox debug APK
+        working-directory: apps/android-terminal
+        run: gradle --no-daemon :app:assembleDebug
+
+      - name: Print APK SHA-256
+        run: sha256sum apps/android-terminal/app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Upload installable APK
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: retaillink-f20-sandbox-terminal
+          path: apps/android-terminal/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14
