@@ -29,12 +29,12 @@ jobs:
         with:
           gradle-version: '9.5.0'
 
-      - name: Install Android API 37
+      - name: Install Android API 36
         run: |
           SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
           test -x "$SDKMANAGER"
           yes | "$SDKMANAGER" --licenses >/dev/null || true
-          "$SDKMANAGER" 'platforms;android-37' 'build-tools;36.0.0'
+          "$SDKMANAGER" 'platforms;android-36' 'build-tools;36.0.0'
 
       - name: Build F20 sandbox debug APK
         working-directory: apps/android-terminal
