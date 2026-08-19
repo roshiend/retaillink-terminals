@@ -16,3 +16,4 @@ dependencyResolutionManagement {
 
 rootProject.name = 'RetaillinkSandboxTerminal'
 include ':app'
+include ':installtest'
