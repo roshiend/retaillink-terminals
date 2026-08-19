@@ -1,0 +1,57 @@
+name: F20 Install Test APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/android-terminal/installtest/**'
+      - 'apps/android-terminal/settings.gradle'
+      - '.github/workflows/f20-install-test.yml'
+
+jobs:
+  build-install-test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+
+      - name: Set up Java 17
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle 9.5
+        uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb
+        with:
+          gradle-version: '9.5.0'
+
+      - name: Install Android API 36
+        run: |
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          test -x "$SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" 'platforms;android-36' 'build-tools;36.0.0'
+
+      - name: Build minimal F20 install test
+        working-directory: apps/android-terminal
+        run: gradle --no-daemon :installtest:assembleRelease
+
+      - name: Verify APK signatures and metadata
+        run: |
+          APK=apps/android-terminal/installtest/build/outputs/apk/release/installtest-release.apk
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs "$APK"
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$APK" | head -20
+          sha256sum "$APK"
+
+      - name: Upload F20 install test APK
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: f20-install-test-v1-v2
+          path: apps/android-terminal/installtest/build/outputs/apk/release/installtest-release.apk
+          if-no-files-found: error
+          retention-days: 14
