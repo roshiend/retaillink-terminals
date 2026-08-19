@@ -1,0 +1,1 @@
+de39e8b30993b2a85b2e8c0dfc27c19aff6f33bfef8103436adfb6dff8e12e6b  artifacts/f20-install-test/F20-Install-Test.apk
