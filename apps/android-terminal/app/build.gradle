@@ -10,8 +10,8 @@ android {
         applicationId 'com.retaillink.f20.myposbridge'
         minSdk 23
         targetSdk 29
-        versionCode 5
-        versionName '0.3.0'
+        versionCode 6
+        versionName '0.4.0'
     }
 
     signingConfigs {
@@ -53,6 +53,8 @@ dependencies {
     // the vendor payment application; Retaillink receives only SDK results.
     implementation 'com.mypos:mypossmartsdk:1.0.8'
 
-    // FEITIAN FTSDK is intentionally not guessed or vendored. FeitianDriver
-    // remains a safe placeholder until the official F20-compatible SDK is obtained.
+    // FEITIAN FTSDK v1.0.0.71. The JAR is fetched separately and SHA-256
+    // verified before CI/local builds so the vendor binary is not silently
+    // replaced by a different file.
+    implementation files('libs/FTSDK_api_V1.0.0.71_20220401.jar')
 }
