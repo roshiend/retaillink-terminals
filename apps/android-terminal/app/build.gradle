@@ -7,20 +7,20 @@ android {
     compileSdk 36
 
     defaultConfig {
-        applicationId 'com.retaillink.terminal.sandbox'
-        minSdk 24
-        // The first physical target is the Android 10 (API 29) FEITIAN F20.
-        // Keeping targetSdk at 29 avoids introducing newer-platform behaviour
-        // changes while we determine the vendor installation/signing policy.
+        // Fresh package ID prevents any stale/partial install or signing history
+        // from earlier Retaillink sandbox APKs affecting this F20 test.
+        applicationId 'com.retaillink.f20.myposbridge'
+        // API 23 deliberately keeps v1/JAR signing in the release APK as an
+        // additional compatibility path for older/custom package installers.
+        // The physical F20 is Android 10 (API 29), so runtime compatibility is unchanged.
+        minSdk 23
         targetSdk 29
-        versionCode 3
-        versionName '0.2.0'
+        versionCode 4
+        versionName '0.2.1'
     }
 
     signingConfigs {
         debug {
-            // Explicitly include the signature schemes understood by Android 10
-            // and older/custom package installers on payment terminals.
             enableV1Signing true
             enableV2Signing true
             enableV3Signing false
@@ -43,8 +43,6 @@ android {
         }
     }
 
-    // This APK is a direct-sideload compatibility build for a privately owned
-    // Android 10 terminal, not a Google Play distribution artifact.
     lint {
         disable 'ExpiredTargetSdkVersion'
     }
