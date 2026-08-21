@@ -3,6 +3,7 @@ package com.retaillink.terminal.sandbox;
 import android.app.Activity;
 import android.content.Intent;
 import android.graphics.Color;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -27,6 +28,7 @@ public class MyPosProbeActivity extends Activity {
     private TextView packageStatus;
     private TextView sdkStatus;
     private TextView driverStatus;
+    private TextView feitianStatus;
     private Button readPosInfo;
     private boolean waitingForPosInfo;
 
@@ -71,7 +73,7 @@ public class MyPosProbeActivity extends Activity {
         root.addView(title);
 
         TextView stage = text(
-            "DRIVER ABSTRACTION — SANDBOX / myPOS / FEITIAN\nNo raw card, NFC, EMV or PIN data is read by Retaillink.",
+            "FTSDK STAGE 1 — SANDBOX / myPOS / FEITIAN\nNo raw card, NFC, EMV or PIN data is read by Retaillink.",
             13,
             Color.rgb(120, 70, 20)
         );
@@ -83,16 +85,44 @@ public class MyPosProbeActivity extends Activity {
         driverStatus.setPadding(dp(8), dp(10), dp(8), dp(12));
         root.addView(driverStatus);
 
-        heading(root, "2. myPOS payment package");
-        packageStatus = text("Checking…", 16, Color.DKGRAY);
-        packageStatus.setPadding(dp(8), dp(10), dp(8), dp(12));
-        root.addView(packageStatus);
-
         Button refresh = button("REFRESH DRIVER STATUS");
         refresh.setOnClickListener(v -> refreshDriverStatus());
         root.addView(refresh);
 
-        heading(root, "3. myPOS Smart SDK POS information");
+        heading(root, "2. FEITIAN FTSDK / POS Server");
+        feitianStatus = text("Not tested yet.", 15, Color.DKGRAY);
+        feitianStatus.setPadding(dp(8), dp(10), dp(8), dp(12));
+        root.addView(feitianStatus);
+
+        Button connectFeitian = button("CONNECT FEITIAN POS SERVER");
+        connectFeitian.setOnClickListener(v -> connectFeitian());
+        root.addView(connectFeitian);
+
+        Button readFeitian = button("READ FEITIAN DEVICE INFO");
+        readFeitian.setOnClickListener(v -> readFeitianInfo());
+        root.addView(readFeitian);
+
+        Button beepFeitian = button("TEST FEITIAN BUZZER");
+        beepFeitian.setOnClickListener(v -> testFeitianBuzzer());
+        root.addView(beepFeitian);
+
+        Button printFeitian = button("PRINT FEITIAN TEST RECEIPT");
+        printFeitian.setOnClickListener(v -> testFeitianPrinter());
+        root.addView(printFeitian);
+
+        root.addView(text(
+            "Stage 1 only tests the FEITIAN POS Server, device information, buzzer and printer. " +
+            "EMV, NFC, chip, magstripe and PIN operations remain disabled.",
+            12,
+            Color.DKGRAY
+        ));
+
+        heading(root, "3. myPOS payment package");
+        packageStatus = text("Checking…", 16, Color.DKGRAY);
+        packageStatus.setPadding(dp(8), dp(10), dp(8), dp(12));
+        root.addView(packageStatus);
+
+        heading(root, "4. myPOS Smart SDK POS information");
         sdkStatus = text("Not tested yet.", 15, Color.DKGRAY);
         sdkStatus.setPadding(dp(8), dp(10), dp(8), dp(12));
         root.addView(sdkStatus);
@@ -101,20 +131,14 @@ public class MyPosProbeActivity extends Activity {
         readPosInfo.setOnClickListener(v -> requestPosInfo());
         root.addView(readPosInfo);
 
-        root.addView(text(
-            "Payment/refund calls stay disabled until this driver can successfully read POS information on supported hardware.",
-            12,
-            Color.DKGRAY
-        ));
-
-        heading(root, "4. Existing Retaillink sandbox");
+        heading(root, "5. Existing Retaillink sandbox");
         Button sandbox = button("OPEN RETAILLINK SANDBOX TERMINAL");
         sandbox.setOnClickListener(v -> startActivity(new Intent(this, MainActivity.class)));
         root.addView(sandbox);
 
         TextView boundary = text(
-            "SECURITY BOUNDARY\nVendor drivers delegate secure payment handling to the vendor-certified payment stack. " +
-            "Retaillink does not request or store PAN, CVV or PIN.",
+            "SECURITY BOUNDARY\nStage 1 does not request card numbers, PINs or EMV/NFC transaction data. " +
+            "Payment methods stay disabled until the vendor service path is verified on supported hardware.",
             12,
             Color.rgb(150, 45, 45)
         );
@@ -127,21 +151,31 @@ public class MyPosProbeActivity extends Activity {
 
     private void refreshDriverStatus() {
         boolean myPos = myPosDriver.isAvailable(this);
-        boolean feitianCandidate = feitianDriver.looksLikeFeitianF20();
-        boolean feitianSdk = feitianDriver.isAvailable(this);
-
-        String preferred = TerminalDriverRegistry.preferredRealDriver(this) == null
-            ? "none"
-            : TerminalDriverRegistry.preferredRealDriver(this).displayName();
+        boolean feitianHardware = feitianDriver.looksLikeFeitianF20();
+        boolean feitianServer = feitianDriver.hasPosServerPackage(this);
+        TerminalDriver preferredDriver = TerminalDriverRegistry.preferredRealDriver(this);
+        String preferred = preferredDriver == null ? "none" : preferredDriver.displayName();
 
         driverStatus.setText(
             "Sandbox: available\n" +
             "myPOS: " + (myPos ? "available" : "unavailable") + "\n" +
-            "FEITIAN F20-class hardware: " + (feitianCandidate ? "detected" : "not detected") + "\n" +
-            "FEITIAN FTSDK: " + (feitianSdk ? "available" : "not bundled") + "\n" +
+            "FEITIAN F20-class hardware: " + (feitianHardware ? "detected" : "not detected") + "\n" +
+            "FEITIAN FTSDK: bundled (" + FeitianDriver.SDK_VERSION + ")\n" +
+            "FEITIAN POS Server: " + (feitianServer ? "package visible" : "com.ftpos.apiservice not found") + "\n" +
             "Preferred real driver: " + preferred
         );
         driverStatus.setTextColor(Color.rgb(40, 70, 110));
+
+        if (!feitianHardware) {
+            setFeitianStatus("FTSDK is bundled, but this device does not identify as an F20.", Color.rgb(170, 100, 20));
+        } else if (!feitianServer) {
+            setFeitianStatus(
+                "F20 hardware detected. FTSDK is bundled, but com.ftpos.apiservice is not installed/visible.",
+                Color.rgb(170, 100, 20)
+            );
+        } else {
+            setFeitianStatus("F20 hardware and FEITIAN POS Server package detected. Ready to bind.", Color.rgb(25, 120, 75));
+        }
 
         if (!myPos) {
             packageStatus.setText("NOT FOUND — package com.mypos is not installed/visible.");
@@ -151,12 +185,57 @@ public class MyPosProbeActivity extends Activity {
                 "The myPOS driver is present, but it requires the myPOS payment application/service on the terminal.",
                 Color.rgb(170, 100, 20)
             );
-            return;
+        } else {
+            packageStatus.setText("FOUND — myPOS driver can see package com.mypos.");
+            packageStatus.setTextColor(Color.rgb(25, 120, 75));
+            readPosInfo.setEnabled(true);
         }
+    }
 
-        packageStatus.setText("FOUND — myPOS driver can see package com.mypos.");
-        packageStatus.setTextColor(Color.rgb(25, 120, 75));
-        readPosInfo.setEnabled(true);
+    private void connectFeitian() {
+        setFeitianStatus("Binding to com.ftpos.apiservice…", Color.rgb(40, 70, 110));
+        feitianDriver.connect(this, result -> main.post(() ->
+            setFeitianStatus(result.message, result.success ? Color.rgb(25, 120, 75) : Color.rgb(170, 40, 40))
+        ));
+    }
+
+    private void readFeitianInfo() {
+        setFeitianStatus("Connecting and reading FEITIAN device information…", Color.rgb(40, 70, 110));
+        feitianDriver.getTerminalInfo(this, info -> main.post(() -> {
+            if (info == null || !info.success) {
+                String details = info == null ? "FEITIAN driver returned no information." : safe(info.details);
+                setFeitianStatus(details, Color.rgb(170, 40, 40));
+                return;
+            }
+            setFeitianStatus(
+                "FEITIAN DRIVER CONNECTED\n" +
+                "Serial: " + printable(info.terminalId) + "\n" +
+                info.details,
+                Color.rgb(25, 120, 75)
+            );
+        }));
+    }
+
+    private void testFeitianBuzzer() {
+        setFeitianStatus("Running FEITIAN buzzer test…", Color.rgb(40, 70, 110));
+        feitianDriver.beep(this, result -> main.post(() ->
+            setFeitianStatus(result.message, result.success ? Color.rgb(25, 120, 75) : Color.rgb(170, 40, 40))
+        ));
+    }
+
+    private void testFeitianPrinter() {
+        String receipt =
+            "RETAILLINK\n" +
+            "FEITIAN FTSDK TEST\n" +
+            "SDK: " + FeitianDriver.SDK_VERSION + "\n" +
+            "Model: " + Build.MODEL + "\n" +
+            "Android: " + Build.VERSION.RELEASE + "\n" +
+            "No payment processed.";
+
+        setFeitianStatus("Sending diagnostic receipt to FEITIAN printer…", Color.rgb(40, 70, 110));
+        feitianDriver.printReceipt(this, receipt, result -> main.post(() ->
+            setFeitianStatus(result.message, result.success ? Color.rgb(25, 120, 75) : Color.rgb(170, 40, 40))
+        ));
     }
 
     private void requestPosInfo() {
@@ -207,6 +286,11 @@ public class MyPosProbeActivity extends Activity {
     private void setSdkStatus(String value, int color) {
         sdkStatus.setText(value);
         sdkStatus.setTextColor(color);
+    }
+
+    private void setFeitianStatus(String value, int color) {
+        feitianStatus.setText(value);
+        feitianStatus.setTextColor(color);
     }
 
     private void heading(LinearLayout root, String value) {
