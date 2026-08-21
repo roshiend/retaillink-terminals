@@ -6,6 +6,9 @@ on:
       - feat/terminal-driver-abstraction
     paths:
       - .github/workflows/fetch-feitian-sdk.yml
+  pull_request:
+    paths:
+      - .github/workflows/fetch-feitian-sdk.yml
   workflow_dispatch:
 
 permissions:
