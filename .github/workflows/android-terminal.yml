@@ -12,7 +12,7 @@ jobs:
   build-apk:
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
 
     steps:
       - name: Checkout source
@@ -36,17 +36,36 @@ jobs:
           yes | "$SDKMANAGER" --licenses >/dev/null || true
           "$SDKMANAGER" 'platforms;android-36' 'build-tools;36.0.0'
 
-      - name: Build F20 Android 10 compatibility APK
+      - name: Build F20 myPOS Smart SDK Stage 1 APK
         working-directory: apps/android-terminal
         run: gradle --no-daemon :app:assembleRelease
 
-      - name: Print APK SHA-256
-        run: sha256sum apps/android-terminal/app/build/outputs/apk/release/app-release.apk
+      - name: Verify APK signatures and metadata
+        run: |
+          APK=apps/android-terminal/app/build/outputs/apk/release/app-release.apk
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs "$APK"
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$APK" | head -20
+          sha256sum "$APK"
 
       - name: Upload installable APK
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: retaillink-f20-android10-compat
+          name: retaillink-f20-mypos-stage1
           path: apps/android-terminal/app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
           retention-days: 14
+
+      - name: Publish verified APK to repository
+        run: |
+          mkdir -p artifacts/f20-mypos-stage1
+          cp apps/android-terminal/app/build/outputs/apk/release/app-release.apk artifacts/f20-mypos-stage1/Retaillink-F20-myPOS-Stage1.apk
+          sha256sum artifacts/f20-mypos-stage1/Retaillink-F20-myPOS-Stage1.apk > artifacts/f20-mypos-stage1/SHA256.txt
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add artifacts/f20-mypos-stage1/Retaillink-F20-myPOS-Stage1.apk artifacts/f20-mypos-stage1/SHA256.txt
+          if git diff --cached --quiet; then
+            echo "No artifact change to publish"
+          else
+            git commit -m "test(f20): publish verified myPOS stage1 APK [skip ci]"
+            git push
+          fi
