@@ -2,14 +2,23 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET" />
 
+    <!-- Required by the official myPOS Smart SDK to discover/communicate with
+         the myPOS payment application without exposing card or PIN data. -->
+    <queries>
+        <package android:name="com.mypos" />
+    </queries>
+
     <application
         android:allowBackup="false"
-        android:label="Retaillink Sandbox Terminal"
+        android:label="Retaillink F20 Bridge"
         android:supportsRtl="true"
         android:usesCleartextTraffic="true"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
+
+        <!-- Stage 1 launcher: validates that the myPOS payment service exists
+             and that Smart SDK POS-info communication is available. -->
         <activity
-            android:name=".MainActivity"
+            android:name=".MyPosProbeActivity"
             android:exported="true"
             android:screenOrientation="unspecified">
             <intent-filter>
@@ -17,5 +26,12 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Existing Retaillink synthetic-payment sandbox remains available
+             from the bridge screen. -->
+        <activity
+            android:name=".MainActivity"
+            android:exported="false"
+            android:screenOrientation="unspecified" />
     </application>
 </manifest>
