@@ -1,1 +1,1 @@
-a78d94036537af1ab767e331cf093f21a12c8865a5aab25ddb9f71d9d2c66667  artifacts/f20-mypos-stage1/Retaillink-F20-myPOS-Stage1.apk
+40d56f2c959a8a359121592e34af9f1b04d7371b1eda4cb98835d294a3c3eccb  artifacts/f20-mypos-stage1/Retaillink-F20-myPOS-Stage1.apk
