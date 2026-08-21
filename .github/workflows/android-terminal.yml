@@ -3,7 +3,9 @@ name: Android Terminal APK
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches:
+      - main
+      - feat/terminal-driver-abstraction
     paths:
       - 'apps/android-terminal/**'
       - '.github/workflows/android-terminal.yml'
@@ -36,7 +38,7 @@ jobs:
           yes | "$SDKMANAGER" --licenses >/dev/null || true
           "$SDKMANAGER" 'platforms;android-36' 'build-tools;36.0.0'
 
-      - name: Build F20 myPOS Smart SDK Stage 1 APK
+      - name: Build Android terminal APK
         id: build
         working-directory: apps/android-terminal
         shell: bash
@@ -59,7 +61,7 @@ jobs:
         if: steps.build.outputs.exit_code == '0'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: retaillink-f20-mypos-stage1
+          name: retaillink-terminal-driver-build
           path: apps/android-terminal/app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
           retention-days: 14
@@ -68,31 +70,31 @@ jobs:
         if: always()
         shell: bash
         run: |
-          rm -rf artifacts/f20-mypos-stage1
-          mkdir -p artifacts/f20-mypos-stage1
+          rm -rf artifacts/android-terminal-driver
+          mkdir -p artifacts/android-terminal-driver
 
           if [ "${{ steps.build.outputs.exit_code }}" = "0" ]; then
-            cp apps/android-terminal/app/build/outputs/apk/release/app-release.apk artifacts/f20-mypos-stage1/Retaillink-F20-myPOS-Stage1.apk
-            cp apk-verification.txt artifacts/f20-mypos-stage1/APK-VERIFICATION.txt
-            cp apk-metadata.txt artifacts/f20-mypos-stage1/APK-METADATA.txt
-            sha256sum artifacts/f20-mypos-stage1/Retaillink-F20-myPOS-Stage1.apk > artifacts/f20-mypos-stage1/SHA256.txt
-            echo "PASS" > artifacts/f20-mypos-stage1/BUILD-STATUS.txt
+            cp apps/android-terminal/app/build/outputs/apk/release/app-release.apk artifacts/android-terminal-driver/Retaillink-Terminal-Drivers.apk
+            cp apk-verification.txt artifacts/android-terminal-driver/APK-VERIFICATION.txt
+            cp apk-metadata.txt artifacts/android-terminal-driver/APK-METADATA.txt
+            sha256sum artifacts/android-terminal-driver/Retaillink-Terminal-Drivers.apk > artifacts/android-terminal-driver/SHA256.txt
+            echo "PASS" > artifacts/android-terminal-driver/BUILD-STATUS.txt
           else
-            echo "FAIL" > artifacts/f20-mypos-stage1/BUILD-STATUS.txt
+            echo "FAIL" > artifacts/android-terminal-driver/BUILD-STATUS.txt
             if [ -f apps/android-terminal/build.log ]; then
-              tail -200 apps/android-terminal/build.log > artifacts/f20-mypos-stage1/BUILD-FAILED.txt
+              tail -200 apps/android-terminal/build.log > artifacts/android-terminal-driver/BUILD-FAILED.txt
             else
-              echo "Gradle build failed before a log was captured." > artifacts/f20-mypos-stage1/BUILD-FAILED.txt
+              echo "Gradle build failed before a log was captured." > artifacts/android-terminal-driver/BUILD-FAILED.txt
             fi
           fi
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A artifacts/f20-mypos-stage1
+          git add -- artifacts/android-terminal-driver
           if git diff --cached --quiet; then
             echo "No build-result change to publish"
           else
-            git commit -m "test(f20): publish myPOS stage1 build result [skip ci]"
+            git commit -m "test(android-terminal): publish driver build result [skip ci]"
             git push
           fi
 
