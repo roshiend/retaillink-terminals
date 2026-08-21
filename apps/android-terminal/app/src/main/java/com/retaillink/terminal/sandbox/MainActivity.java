@@ -19,6 +19,10 @@ import android.widget.ScrollView;
 import android.widget.Switch;
 import android.widget.TextView;
 
+import com.retaillink.terminal.driver.SandboxDriver;
+import com.retaillink.terminal.driver.TerminalDriver;
+import com.retaillink.terminal.driver.TerminalDriverRegistry;
+
 import org.json.JSONObject;
 
 import java.io.BufferedReader;
@@ -41,6 +45,7 @@ public class MainActivity extends Activity {
 
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private final Handler main = new Handler(Looper.getMainLooper());
+    private final SandboxDriver sandboxDriver = TerminalDriverRegistry.sandbox();
 
     private SharedPreferences prefs;
     private Switch connected;
@@ -188,16 +193,25 @@ public class MainActivity extends Activity {
     }
 
     private void offlineScenario(String scenario, long minor) {
+        TerminalDriver.PaymentRequest request = new TerminalDriver.PaymentRequest(
+            minor,
+            "LKR",
+            reference.getText().toString().trim()
+        );
+        TerminalDriver.TransactionResult result = sandboxDriver.simulatePayment(scenario, request);
         String money = new BigDecimal(minor).movePointLeft(2).toPlainString() + " LKR";
-        if ("approve".equals(scenario)) {
-            setStatus("APPROVED • " + money + "\nOffline simulator only.", Color.rgb(25, 120, 75));
-        } else if ("decline".equals(scenario)) {
-            setStatus("DECLINED • " + money + "\nOffline simulator only.", Color.rgb(170, 40, 40));
-        } else {
+
+        if ("approved".equals(result.status)) {
+            setStatus("APPROVED • " + money + "\n" + result.message, Color.rgb(25, 120, 75));
+        } else if ("declined".equals(result.status)) {
+            setStatus("DECLINED • " + money + "\n" + result.message, Color.rgb(170, 40, 40));
+        } else if ("requires_action".equals(result.status)) {
             pendingCheckoutToken = "offline";
-            pendingActionToken = "offline";
+            pendingActionToken = result.transactionId;
             complete3ds.setVisibility(View.VISIBLE);
             setStatus("3DS REQUIRED • " + money + "\nPress APPROVE SIMULATED 3DS.", Color.rgb(170, 100, 20));
+        } else {
+            setStatus("SANDBOX ERROR • " + result.message, Color.rgb(170, 40, 40));
         }
     }
 

@@ -1,0 +1,1 @@
+d755e63fd5f520a0920b857b8f5e285961b52c0e45aa68c1da30007047f7766c  apps/android-terminal/app/libs/FTSDK_api_V1.0.0.71_20220401.jar
