@@ -10,3 +10,6 @@ build/
 coverage/
 *.log
 .DS_Store
+
+# Vendor terminal SDKs are fetched and hash-verified during Android builds.
+apps/android-terminal/app/libs/FTSDK_api_V1.0.0.71_20220401.jar
