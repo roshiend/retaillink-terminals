@@ -1,1 +1,1 @@
-69eef7f2fe88aed1bafcc48f5df04a23d654e0945e26b982cbd4df531759fa08  artifacts/android-terminal-driver/Retaillink-Terminal-Drivers.apk
+6d497e7a4a0b25bad8e0a4406add3dfe2867a1a19e2ac6ab7cadbafda708b26f  artifacts/android-terminal-driver/Retaillink-Terminal-Drivers.apk
