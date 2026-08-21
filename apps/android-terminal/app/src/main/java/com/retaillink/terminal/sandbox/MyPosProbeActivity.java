@@ -2,8 +2,6 @@ package com.retaillink.terminal.sandbox;
 
 import android.app.Activity;
 import android.content.Intent;
-import android.content.pm.PackageInfo;
-import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.os.Bundle;
 import android.os.Handler;
@@ -14,17 +12,21 @@ import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
 
-import com.mypos.smartsdk.MyPOSAPI;
-import com.mypos.smartsdk.OnPOSInfoListener;
-import com.mypos.smartsdk.data.POSInfo;
+import com.retaillink.terminal.driver.FeitianDriver;
+import com.retaillink.terminal.driver.MyPosDriver;
+import com.retaillink.terminal.driver.TerminalDriver;
+import com.retaillink.terminal.driver.TerminalDriverRegistry;
 
 public class MyPosProbeActivity extends Activity {
-    private static final String MYPOS_PACKAGE = "com.mypos";
     private static final long POS_INFO_TIMEOUT_MS = 5000L;
 
     private final Handler main = new Handler(Looper.getMainLooper());
+    private final MyPosDriver myPosDriver = TerminalDriverRegistry.myPos();
+    private final FeitianDriver feitianDriver = TerminalDriverRegistry.feitian();
+
     private TextView packageStatus;
     private TextView sdkStatus;
+    private TextView driverStatus;
     private Button readPosInfo;
     private boolean waitingForPosInfo;
 
@@ -33,8 +35,8 @@ public class MyPosProbeActivity extends Activity {
         waitingForPosInfo = false;
         readPosInfo.setEnabled(true);
         setSdkStatus(
-            "No POS-info response after 5 seconds. The SDK is present in this app, but the " +
-            "myPOS payment service/provider is not responding on this firmware.",
+            "No POS-info response after 5 seconds. The myPOS driver is compiled into Retaillink, but the " +
+            "payment service/provider is not responding on this firmware.",
             Color.rgb(170, 100, 20)
         );
     };
@@ -43,7 +45,7 @@ public class MyPosProbeActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(buildUi());
-        refreshPackageStatus();
+        refreshDriverStatus();
     }
 
     @Override
@@ -64,51 +66,55 @@ public class MyPosProbeActivity extends Activity {
         brand.setTypeface(null, 1);
         root.addView(brand);
 
-        TextView title = text("F20 • myPOS Smart SDK", 25, Color.rgb(20, 24, 30));
+        TextView title = text("Terminal Driver Diagnostics", 25, Color.rgb(20, 24, 30));
         title.setTypeface(null, 1);
         root.addView(title);
 
         TextView stage = text(
-            "STAGE 1 — SDK / PAYMENT-SERVICE DETECTION\nNo card, NFC or PIN data is read by Retaillink.",
+            "DRIVER ABSTRACTION — SANDBOX / myPOS / FEITIAN\nNo raw card, NFC, EMV or PIN data is read by Retaillink.",
             13,
             Color.rgb(120, 70, 20)
         );
         stage.setPadding(0, dp(6), 0, dp(16));
         root.addView(stage);
 
-        heading(root, "1. myPOS payment package");
+        heading(root, "1. Driver registry");
+        driverStatus = text("Checking…", 15, Color.DKGRAY);
+        driverStatus.setPadding(dp(8), dp(10), dp(8), dp(12));
+        root.addView(driverStatus);
+
+        heading(root, "2. myPOS payment package");
         packageStatus = text("Checking…", 16, Color.DKGRAY);
         packageStatus.setPadding(dp(8), dp(10), dp(8), dp(12));
         root.addView(packageStatus);
 
-        Button refresh = button("CHECK com.mypos AGAIN");
-        refresh.setOnClickListener(v -> refreshPackageStatus());
+        Button refresh = button("REFRESH DRIVER STATUS");
+        refresh.setOnClickListener(v -> refreshDriverStatus());
         root.addView(refresh);
 
-        heading(root, "2. Smart SDK POS information");
+        heading(root, "3. myPOS Smart SDK POS information");
         sdkStatus = text("Not tested yet.", 15, Color.DKGRAY);
         sdkStatus.setPadding(dp(8), dp(10), dp(8), dp(12));
         root.addView(sdkStatus);
 
-        readPosInfo = button("READ POS INFO WITH SMART SDK");
+        readPosInfo = button("READ POS INFO THROUGH myPOS DRIVER");
         readPosInfo.setOnClickListener(v -> requestPosInfo());
         root.addView(readPosInfo);
 
         root.addView(text(
-            "A successful response proves that this firmware exposes the myPOS Smart SDK " +
-            "communication path. We will add payment/refund calls only after this stage works.",
+            "Payment/refund calls stay disabled until this driver can successfully read POS information on supported hardware.",
             12,
             Color.DKGRAY
         ));
 
-        heading(root, "3. Existing Retaillink sandbox");
+        heading(root, "4. Existing Retaillink sandbox");
         Button sandbox = button("OPEN RETAILLINK SANDBOX TERMINAL");
         sandbox.setOnClickListener(v -> startActivity(new Intent(this, MainActivity.class)));
         root.addView(sandbox);
 
         TextView boundary = text(
-            "SECURITY BOUNDARY\nThe Smart SDK delegates payment handling to the certified myPOS payment " +
-            "application. Retaillink does not request or store PAN, CVV or PIN.",
+            "SECURITY BOUNDARY\nVendor drivers delegate secure payment handling to the vendor-certified payment stack. " +
+            "Retaillink does not request or store PAN, CVV or PIN.",
             12,
             Color.rgb(150, 45, 45)
         );
@@ -119,91 +125,83 @@ public class MyPosProbeActivity extends Activity {
         return scroll;
     }
 
-    private void refreshPackageStatus() {
-        PackageInfo info = findPackage(MYPOS_PACKAGE);
-        if (info == null) {
+    private void refreshDriverStatus() {
+        boolean myPos = myPosDriver.isAvailable(this);
+        boolean feitianCandidate = feitianDriver.looksLikeFeitianF20();
+        boolean feitianSdk = feitianDriver.isAvailable(this);
+
+        String preferred = TerminalDriverRegistry.preferredRealDriver(this) == null
+            ? "none"
+            : TerminalDriverRegistry.preferredRealDriver(this).displayName();
+
+        driverStatus.setText(
+            "Sandbox: available\n" +
+            "myPOS: " + (myPos ? "available" : "unavailable") + "\n" +
+            "FEITIAN F20-class hardware: " + (feitianCandidate ? "detected" : "not detected") + "\n" +
+            "FEITIAN FTSDK: " + (feitianSdk ? "available" : "not bundled") + "\n" +
+            "Preferred real driver: " + preferred
+        );
+        driverStatus.setTextColor(Color.rgb(40, 70, 110));
+
+        if (!myPos) {
             packageStatus.setText("NOT FOUND — package com.mypos is not installed/visible.");
             packageStatus.setTextColor(Color.rgb(170, 40, 40));
             readPosInfo.setEnabled(false);
             setSdkStatus(
-                "Smart SDK library is compiled into Retaillink, but it needs the myPOS payment " +
-                "application/service on the terminal before POS info or payments can work.",
+                "The myPOS driver is present, but it requires the myPOS payment application/service on the terminal.",
                 Color.rgb(170, 100, 20)
             );
             return;
         }
 
-        String version = info.versionName == null ? "unknown" : info.versionName;
-        packageStatus.setText("FOUND — com.mypos version " + version);
+        packageStatus.setText("FOUND — myPOS driver can see package com.mypos.");
         packageStatus.setTextColor(Color.rgb(25, 120, 75));
         readPosInfo.setEnabled(true);
     }
 
-    private PackageInfo findPackage(String packageName) {
-        try {
-            return getPackageManager().getPackageInfo(packageName, 0);
-        } catch (PackageManager.NameNotFoundException e) {
-            return null;
-        }
-    }
-
     private void requestPosInfo() {
-        if (findPackage(MYPOS_PACKAGE) == null) {
-            refreshPackageStatus();
+        if (!myPosDriver.isAvailable(this)) {
+            refreshDriverStatus();
             return;
         }
 
         waitingForPosInfo = true;
         readPosInfo.setEnabled(false);
-        setSdkStatus("Requesting POS info from com.mypos…", Color.rgb(40, 70, 110));
+        setSdkStatus("Requesting POS info through MyPosDriver…", Color.rgb(40, 70, 110));
         main.removeCallbacks(posInfoTimeout);
         main.postDelayed(posInfoTimeout, POS_INFO_TIMEOUT_MS);
 
-        try {
-            MyPOSAPI.registerPOSInfo(this, new OnPOSInfoListener() {
-                @Override
-                public void onReceive(POSInfo info) {
-                    main.post(() -> handlePosInfo(info));
-                }
-            });
-        } catch (Throwable t) {
-            waitingForPosInfo = false;
-            main.removeCallbacks(posInfoTimeout);
-            readPosInfo.setEnabled(true);
-            String message = t.getMessage();
-            if (message == null || message.trim().isEmpty()) {
-                message = t.getClass().getSimpleName();
-            }
-            setSdkStatus("Smart SDK call failed: " + message, Color.rgb(170, 40, 40));
-        }
+        myPosDriver.getTerminalInfo(this, info -> main.post(() -> handlePosInfo(info)));
     }
 
-    private void handlePosInfo(POSInfo info) {
+    private void handlePosInfo(TerminalDriver.TerminalInfo info) {
         if (!waitingForPosInfo) return;
         waitingForPosInfo = false;
         main.removeCallbacks(posInfoTimeout);
         readPosInfo.setEnabled(true);
 
-        if (info == null) {
-            setSdkStatus("Smart SDK returned no POS information.", Color.rgb(170, 100, 20));
+        if (info == null || !info.success) {
+            String details = info == null ? "Driver returned no terminal information." : safe(info.details);
+            setSdkStatus(details, Color.rgb(170, 100, 20));
             return;
         }
 
-        String tid = safe(info.getTID());
-        String currencyName = safe(info.getCurrencyName());
-        String currencyCode = safe(info.getCurrencyCode());
-
         setSdkStatus(
-            "SMART SDK CONNECTED\n" +
-            "TID: " + tid + "\n" +
-            "Currency: " + currencyName + "\n" +
-            "Currency code: " + currencyCode,
+            "myPOS DRIVER CONNECTED\n" +
+            "TID: " + printable(info.terminalId) + "\n" +
+            "Currency: " + printable(info.currencyName) + "\n" +
+            "Currency code: " + printable(info.currencyCode),
             Color.rgb(25, 120, 75)
         );
     }
 
     private String safe(String value) {
-        return value == null || value.trim().isEmpty() ? "(not supplied)" : value.trim();
+        return value == null ? "" : value.trim();
+    }
+
+    private String printable(String value) {
+        String clean = safe(value);
+        return clean.isEmpty() ? "(not supplied)" : clean;
     }
 
     private void setSdkStatus(String value, int color) {
