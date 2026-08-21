@@ -45,7 +45,7 @@ jobs:
       - name: Fetch verified FEITIAN FTSDK
         working-directory: apps/android-terminal
         shell: bash
-        run: ./fetch-feitian-sdk.sh
+        run: bash ./fetch-feitian-sdk.sh
 
       - name: Build Android terminal APK
         id: build
