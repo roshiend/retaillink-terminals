@@ -37,17 +37,26 @@ jobs:
           "$SDKMANAGER" 'platforms;android-36' 'build-tools;36.0.0'
 
       - name: Build F20 myPOS Smart SDK Stage 1 APK
+        id: build
         working-directory: apps/android-terminal
-        run: gradle --no-daemon :app:assembleRelease
+        shell: bash
+        run: |
+          set +e
+          gradle --no-daemon :app:assembleRelease 2>&1 | tee build.log
+          CODE=${PIPESTATUS[0]}
+          echo "exit_code=$CODE" >> "$GITHUB_OUTPUT"
+          exit 0
 
       - name: Verify APK signatures and metadata
+        if: steps.build.outputs.exit_code == '0'
         run: |
           APK=apps/android-terminal/app/build/outputs/apk/release/app-release.apk
-          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs "$APK"
-          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$APK" | head -20
-          sha256sum "$APK"
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs "$APK" | tee apk-verification.txt
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$APK" | head -20 | tee apk-metadata.txt
+          sha256sum "$APK" | tee apk-sha256.txt
 
       - name: Upload installable APK
+        if: steps.build.outputs.exit_code == '0'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: retaillink-f20-mypos-stage1
@@ -55,17 +64,38 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-      - name: Publish verified APK to repository
+      - name: Publish build result to repository
+        if: always()
+        shell: bash
         run: |
+          rm -rf artifacts/f20-mypos-stage1
           mkdir -p artifacts/f20-mypos-stage1
-          cp apps/android-terminal/app/build/outputs/apk/release/app-release.apk artifacts/f20-mypos-stage1/Retaillink-F20-myPOS-Stage1.apk
-          sha256sum artifacts/f20-mypos-stage1/Retaillink-F20-myPOS-Stage1.apk > artifacts/f20-mypos-stage1/SHA256.txt
+
+          if [ "${{ steps.build.outputs.exit_code }}" = "0" ]; then
+            cp apps/android-terminal/app/build/outputs/apk/release/app-release.apk artifacts/f20-mypos-stage1/Retaillink-F20-myPOS-Stage1.apk
+            cp apk-verification.txt artifacts/f20-mypos-stage1/APK-VERIFICATION.txt
+            cp apk-metadata.txt artifacts/f20-mypos-stage1/APK-METADATA.txt
+            sha256sum artifacts/f20-mypos-stage1/Retaillink-F20-myPOS-Stage1.apk > artifacts/f20-mypos-stage1/SHA256.txt
+            echo "PASS" > artifacts/f20-mypos-stage1/BUILD-STATUS.txt
+          else
+            echo "FAIL" > artifacts/f20-mypos-stage1/BUILD-STATUS.txt
+            if [ -f apps/android-terminal/build.log ]; then
+              tail -200 apps/android-terminal/build.log > artifacts/f20-mypos-stage1/BUILD-FAILED.txt
+            else
+              echo "Gradle build failed before a log was captured." > artifacts/f20-mypos-stage1/BUILD-FAILED.txt
+            fi
+          fi
+
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add artifacts/f20-mypos-stage1/Retaillink-F20-myPOS-Stage1.apk artifacts/f20-mypos-stage1/SHA256.txt
+          git add -A artifacts/f20-mypos-stage1
           if git diff --cached --quiet; then
-            echo "No artifact change to publish"
+            echo "No build-result change to publish"
           else
-            git commit -m "test(f20): publish verified myPOS stage1 APK [skip ci]"
+            git commit -m "test(f20): publish myPOS stage1 build result [skip ci]"
             git push
           fi
+
+      - name: Fail job when Gradle failed
+        if: steps.build.outputs.exit_code != '0'
+        run: exit 1
