@@ -1,0 +1,19 @@
+Verifies
+Verified using v1 scheme (JAR signing): true
+Verified using v2 scheme (APK Signature Scheme v2): true
+Verified using v3 scheme (APK Signature Scheme v3): false
+Verified using v3.1 scheme (APK Signature Scheme v3.1): false
+Verified using v4 scheme (APK Signature Scheme v4): false
+Verified for SourceStamp: false
+Number of signers: 1
+Signer #1 certificate DN: C=US, O=Android, CN=Android Debug
+Signer #1 certificate SHA-256 digest: 8b4794115fa733be42134fc1babacaddba13dae4ad29a4e96d163797084f59ba
+Signer #1 certificate SHA-1 digest: ef9ea97c2c9b504ce27e2576c464f56a4033db29
+Signer #1 certificate MD5 digest: 171956c56ac89a0e34f88c7b7faaf980
+Signer #1 key algorithm: RSA
+Signer #1 key size (bits): 2048
+Signer #1 public key SHA-256 digest: 6ec307cc37833c4f62d918b390941128f52c4031a78d3c5f8fddcdf2c3c55432
+Signer #1 public key SHA-1 digest: 2a89c519491881eed79f238cf4f61e018dd908c5
+Signer #1 public key MD5 digest: 453d1a3ab0916d1a20e99bcbc8e6345f
+WARNING: META-INF/com/android/build/gradle/app-metadata.properties not protected by signature. Unauthorized modifications to this JAR entry will not be detected. Delete or move the entry outside of META-INF/.
+WARNING: META-INF/version-control-info.textproto not protected by signature. Unauthorized modifications to this JAR entry will not be detected. Delete or move the entry outside of META-INF/.

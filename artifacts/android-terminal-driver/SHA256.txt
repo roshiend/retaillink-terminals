@@ -1,0 +1,1 @@
+583e31dd7720f90a8efeacec303462dfcaf796809477577e2f48888500c2516e  artifacts/android-terminal-driver/Retaillink-Terminal-Drivers.apk
