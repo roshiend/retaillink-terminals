@@ -7,16 +7,11 @@ android {
     compileSdk 36
 
     defaultConfig {
-        // Fresh package ID prevents any stale/partial install or signing history
-        // from earlier Retaillink sandbox APKs affecting this F20 test.
         applicationId 'com.retaillink.f20.myposbridge'
-        // API 23 deliberately keeps v1/JAR signing in the release APK as an
-        // additional compatibility path for older/custom package installers.
-        // The physical F20 is Android 10 (API 29), so runtime compatibility is unchanged.
         minSdk 23
         targetSdk 29
-        versionCode 4
-        versionName '0.2.1'
+        versionCode 5
+        versionName '0.3.0'
     }
 
     signingConfigs {
@@ -35,8 +30,8 @@ android {
             debuggable true
         }
         release {
-            // Owner-controlled sandbox/test build only. This is not a myPOS
-            // production/AppMarket signing key.
+            // Owner-controlled development build only. This is not a myPOS or
+            // FEITIAN production signing key.
             signingConfig signingConfigs.debug
             debuggable false
             minifyEnabled false
@@ -54,7 +49,10 @@ android {
 }
 
 dependencies {
-    // Official myPOS Smart SDK. It delegates payment/card handling to the
-    // certified myPOS payment application; this app never handles PAN/PIN.
+    // Official myPOS Smart SDK driver. Secure card/PIN handling remains inside
+    // the vendor payment application; Retaillink receives only SDK results.
     implementation 'com.mypos:mypossmartsdk:1.0.8'
+
+    // FEITIAN FTSDK is intentionally not guessed or vendored. FeitianDriver
+    // remains a safe placeholder until the official F20-compatible SDK is obtained.
 }
