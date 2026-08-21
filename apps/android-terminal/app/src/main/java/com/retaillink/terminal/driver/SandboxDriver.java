@@ -36,12 +36,34 @@ public final class SandboxDriver implements TerminalDriver {
 
     @Override
     public void payment(Activity activity, PaymentRequest request, Callback<TransactionResult> callback) {
-        callback.onResult(new TransactionResult(
+        callback.onResult(simulatePayment("approve", request));
+    }
+
+    public TransactionResult simulatePayment(String scenario, PaymentRequest request) {
+        if ("decline".equals(scenario)) {
+            return new TransactionResult(
+                false,
+                "declined",
+                "",
+                "Synthetic sandbox decline only. No real payment was attempted."
+            );
+        }
+
+        if ("3ds".equals(scenario)) {
+            return new TransactionResult(
+                false,
+                "requires_action",
+                "sandbox_3ds_" + UUID.randomUUID(),
+                "Synthetic 3DS challenge only. No real authentication is performed."
+            );
+        }
+
+        return new TransactionResult(
             true,
             "approved",
             "sandbox_" + UUID.randomUUID(),
             "Synthetic sandbox approval only. No real payment was processed."
-        ));
+        );
     }
 
     @Override
