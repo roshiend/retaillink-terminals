@@ -9,6 +9,10 @@ on:
     paths:
       - 'apps/android-terminal/**'
       - '.github/workflows/android-terminal.yml'
+  pull_request:
+    paths:
+      - 'apps/android-terminal/**'
+      - '.github/workflows/android-terminal.yml'
 
 jobs:
   build-apk:
@@ -67,7 +71,7 @@ jobs:
           retention-days: 14
 
       - name: Publish build result to repository
-        if: always()
+        if: always() && github.event_name != 'pull_request'
         shell: bash
         run: |
           rm -rf artifacts/android-terminal-driver
