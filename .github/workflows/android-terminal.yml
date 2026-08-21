@@ -42,6 +42,11 @@ jobs:
           yes | "$SDKMANAGER" --licenses >/dev/null || true
           "$SDKMANAGER" 'platforms;android-36' 'build-tools;36.0.0'
 
+      - name: Fetch verified FEITIAN FTSDK
+        working-directory: apps/android-terminal
+        shell: bash
+        run: ./fetch-feitian-sdk.sh
+
       - name: Build Android terminal APK
         id: build
         working-directory: apps/android-terminal
@@ -60,13 +65,16 @@ jobs:
           "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs "$APK" | tee apk-verification.txt
           "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$APK" | head -20 | tee apk-metadata.txt
           sha256sum "$APK" | tee apk-sha256.txt
+          sha256sum apps/android-terminal/app/libs/FTSDK_api_V1.0.0.71_20220401.jar | tee feitian-sdk-sha256.txt
 
       - name: Upload installable APK
         if: steps.build.outputs.exit_code == '0'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: retaillink-terminal-driver-build
-          path: apps/android-terminal/app/build/outputs/apk/release/app-release.apk
+          path: |
+            apps/android-terminal/app/build/outputs/apk/release/app-release.apk
+            feitian-sdk-sha256.txt
           if-no-files-found: error
           retention-days: 14
 
@@ -81,6 +89,7 @@ jobs:
             cp apps/android-terminal/app/build/outputs/apk/release/app-release.apk artifacts/android-terminal-driver/Retaillink-Terminal-Drivers.apk
             cp apk-verification.txt artifacts/android-terminal-driver/APK-VERIFICATION.txt
             cp apk-metadata.txt artifacts/android-terminal-driver/APK-METADATA.txt
+            cp feitian-sdk-sha256.txt artifacts/android-terminal-driver/FTSDK-SHA256.txt
             sha256sum artifacts/android-terminal-driver/Retaillink-Terminal-Drivers.apk > artifacts/android-terminal-driver/SHA256.txt
             echo "PASS" > artifacts/android-terminal-driver/BUILD-STATUS.txt
           else
