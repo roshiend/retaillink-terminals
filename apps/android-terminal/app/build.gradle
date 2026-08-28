@@ -27,12 +27,10 @@ android {
     productFlavors {
         appmarket {
             dimension 'terminal'
-            // Permanent package for myPOS Demo/Production AppMarket releases.
             applicationId 'com.retaillink.terminal'
         }
         f20 {
             dimension 'terminal'
-            // Preserve the existing owner-controlled F20 diagnostic package.
             applicationId 'com.retaillink.f20.myposbridge'
             versionCode 7
             versionName '0.5.0-f20'
@@ -59,6 +57,14 @@ android {
         buildConfig true
     }
 
+    // Modern AGP maps this to extractNativeLibs=true in the packaged manifest.
+    // This is the supported replacement for setting the manifest attribute directly.
+    packagingOptions {
+        jniLibs {
+            useLegacyPackaging true
+        }
+    }
+
     lint {
         disable 'ExpiredTargetSdkVersion'
     }
@@ -70,11 +76,6 @@ android {
 }
 
 dependencies {
-    // Official myPOS Smart SDK is shared by both variants. Secure payment/card
-    // handling stays inside the myPOS payment application/service.
     implementation 'com.mypos:mypossmartsdk:1.0.8'
-
-    // FEITIAN hardware SDK exists only in the F20 diagnostic variant and is not
-    // packaged into the myPOS AppMarket APK.
     f20Implementation files('libs/FTSDK_api_V1.0.0.71_20220401.jar')
 }
