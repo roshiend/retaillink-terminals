@@ -1,0 +1,85 @@
+name: Android AppMarket Beta
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feat/mypos-appmarket-beta
+    paths:
+      - 'apps/android-terminal/**'
+      - '.github/workflows/android-appmarket.yml'
+  pull_request:
+    paths:
+      - 'apps/android-terminal/**'
+      - '.github/workflows/android-appmarket.yml'
+
+jobs:
+  build-appmarket:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+
+      - name: Set up Java 17
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle 9.5
+        uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb
+        with:
+          gradle-version: '9.5.0'
+
+      - name: Install Android API 36
+        run: |
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          test -x "$SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" 'platforms;android-36' 'build-tools;36.0.0'
+
+      - name: Build myPOS AppMarket release
+        working-directory: apps/android-terminal
+        run: gradle --no-daemon :app:assembleAppmarketRelease
+
+      - name: Validate AppMarket APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="$(find apps/android-terminal/app/build/outputs/apk/appmarket/release -type f -name '*.apk' | head -1)"
+          test -n "$APK"
+          echo "APK=$APK" | tee appmarket-build.txt
+
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$APK" | tee appmarket-metadata.txt
+          grep -q "package: name='com.retaillink.terminal'" appmarket-metadata.txt
+          grep -q "versionName='0.5.0'" appmarket-metadata.txt
+          grep -q "application-label:'Retaillink'" appmarket-metadata.txt
+
+          set +e
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose "$APK" > appmarket-signature-check.txt 2>&1
+          SIGNED=$?
+          set -e
+          if [ "$SIGNED" -eq 0 ]; then
+            echo "ERROR: AppMarket release was unexpectedly signed. Do not use debug signing for this artifact." >&2
+            cat appmarket-signature-check.txt >&2
+            exit 1
+          fi
+          echo "UNSIGNED_RELEASE_CONFIRMED" | tee -a appmarket-signature-check.txt
+
+          sha256sum "$APK" | tee appmarket-sha256.txt
+          mkdir -p appmarket-artifact
+          cp "$APK" appmarket-artifact/Retaillink-AppMarket-Beta-v0.5.0-unsigned.apk
+          cp appmarket-metadata.txt appmarket-artifact/APK-METADATA.txt
+          cp appmarket-signature-check.txt appmarket-artifact/SIGNATURE-STATUS.txt
+          cp appmarket-sha256.txt appmarket-artifact/SHA256.txt
+
+      - name: Upload AppMarket beta artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: retaillink-mypos-appmarket-beta-v0.5.0
+          path: appmarket-artifact/
+          if-no-files-found: error
+          retention-days: 14
