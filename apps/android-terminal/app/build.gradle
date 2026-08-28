@@ -7,11 +7,11 @@ android {
     compileSdk 36
 
     defaultConfig {
-        applicationId 'com.retaillink.f20.myposbridge'
+        applicationId 'com.retaillink.terminal'
         minSdk 23
         targetSdk 29
-        versionCode 6
-        versionName '0.4.0'
+        versionCode 1
+        versionName '0.5.0'
     }
 
     signingConfigs {
@@ -23,6 +23,23 @@ android {
         }
     }
 
+    flavorDimensions += 'terminal'
+    productFlavors {
+        appmarket {
+            dimension 'terminal'
+            // Permanent package for myPOS Demo/Production AppMarket releases.
+            applicationId 'com.retaillink.terminal'
+        }
+        f20 {
+            dimension 'terminal'
+            // Preserve the existing owner-controlled F20 diagnostic package.
+            applicationId 'com.retaillink.f20.myposbridge'
+            versionCode 7
+            versionName '0.5.0-f20'
+            signingConfig signingConfigs.debug
+        }
+    }
+
     buildTypes {
         debug {
             applicationIdSuffix '.debug'
@@ -30,9 +47,9 @@ android {
             debuggable true
         }
         release {
-            // Owner-controlled development build only. This is not a myPOS or
-            // FEITIAN production signing key.
-            signingConfig signingConfigs.debug
+            // AppMarket release is deliberately left without a signingConfig.
+            // If myPOS Demo AppMarket requires developer signing, use a private
+            // release key supplied outside source control; never commit it here.
             debuggable false
             minifyEnabled false
         }
@@ -49,12 +66,11 @@ android {
 }
 
 dependencies {
-    // Official myPOS Smart SDK driver. Secure card/PIN handling remains inside
-    // the vendor payment application; Retaillink receives only SDK results.
+    // Official myPOS Smart SDK is shared by both variants. Secure payment/card
+    // handling stays inside the myPOS payment application/service.
     implementation 'com.mypos:mypossmartsdk:1.0.8'
 
-    // FEITIAN FTSDK v1.0.0.71. The JAR is fetched separately and SHA-256
-    // verified before CI/local builds so the vendor binary is not silently
-    // replaced by a different file.
-    implementation files('libs/FTSDK_api_V1.0.0.71_20220401.jar')
+    // FEITIAN hardware SDK exists only in the F20 diagnostic variant and is not
+    // packaged into the myPOS AppMarket APK.
+    f20Implementation files('libs/FTSDK_api_V1.0.0.71_20220401.jar')
 }
