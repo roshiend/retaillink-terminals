@@ -2,10 +2,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET" />
 
-    <!-- Vendor payment/service packages used by the terminal drivers. -->
     <queries>
         <package android:name="com.mypos" />
-        <package android:name="com.ftpos.apiservice" />
     </queries>
 
     <application
@@ -15,8 +13,6 @@
         android:usesCleartextTraffic="true"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
 
-        <!-- Terminal-driver diagnostics launcher. Secure payment/PIN/card data
-             remains inside the vendor-certified service stack. -->
         <activity
             android:name=".MyPosProbeActivity"
             android:exported="true"
